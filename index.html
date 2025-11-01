@@ -22,9 +22,7 @@
                         sans: ['Inter', 'system-ui', 'sans-serif'],
                         display: ['Changa One', 'system-ui', 'sans-serif']
                     },
-                    animation: {
-                        'float': 'float 3s ease-in-out infinite'
-                    },
+                    animation: { 'float': 'float 3s ease-in-out infinite' },
                     keyframes: {
                         float: {
                             '0%, 100%': { transform: 'translateY(0)' },
@@ -36,12 +34,8 @@
         }
     </script>
     <style type="text/tailwindcss">
-        .text-shadow-glow {
-            text-shadow: 0 0 10px rgba(0, 104, 255, 0.5);
-        }
-        .glow-border {
-            box-shadow: 0 0 12px rgba(24, 229, 160, 0.3);
-        }
+        .text-shadow-glow { text-shadow: 0 0 10px rgba(0, 104, 255, 0.5); }
+        .glow-border { box-shadow: 0 0 12px rgba(24, 229, 160, 0.3); }
         .bg-grid {
             background-image: url('data:image/svg+xml,%3Csvg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"%3E%3Ccircle cx="1" cy="1" r="1" fill="%230068FF" fill-opacity="0.1"/%3E%3C/svg%3E');
             background-size: 20px 20px;
@@ -95,18 +89,23 @@
                     <div class="bg-dark/80 p-3 rounded-lg border border-primary/20">
                         <p id="balanceStatus" class="text-light-gray text-sm">GT Balance: 0 | GNGatefun: 0 | GNEIP5564: 0</p>
                     </div>
+
+                    <!-- Swap GNGatefun → GNEIP5564 -->
                     <div class="flex flex-col space-y-2">
                         <label class="block text-left text-light-gray mb-2">Swap GNGatefun to GNEIP5564</label>
                         <input type="text" id="swapToX402Amount" placeholder="Enter amount" class="px-4 py-2 bg-dark/80 border border-primary/20 rounded-lg text-white focus:outline-none focus:border-secondary">
                         <p id="swapToX402Info" class="text-light-gray text-sm">Available GNEIP5564: Please enter amount to check</p>
                         <button id="swapToX402Button" class="mt-2 px-6 py-3 bg-primary text-white rounded-full font-medium hover:bg-primary/80 transition-all disabled:bg-dark/50 disabled:cursor-not-allowed" disabled>Swap to GNEIP5564</button>
                     </div>
+
+                    <!-- Swap GNEIP5564 → GNGatefun -->
                     <div class="flex flex-col space-y-2">
                         <label class="block text-left text-light-gray mb-2">Swap GNEIP5564 to GNGatefun</label>
                         <input type="text" id="swapToGatefunAmount" placeholder="Enter amount" class="px-4 py-2 bg-dark/80 border border-primary/20 rounded-lg text-white focus:outline-none focus:border-secondary">
                         <p id="swapToGatefunInfo" class="text-light-gray text-sm">Available GNGatefun: Please enter amount to check</p>
                         <button id="swapToGatefunButton" class="mt-2 px-6 py-3 bg-primary text-white rounded-full font-medium hover:bg-primary/80 transition-all disabled:bg-dark/50 disabled:cursor-not-allowed" disabled>Swap to GNGatefun</button>
                     </div>
+
                     <div class="mt-4">
                         <img src="https://raw.githubusercontent.com/WoofingLabs/Grabbit/refs/heads/main/images/GN.png" alt="GN Logo" class="w-16 h-16 mx-auto animate-float">
                     </div>
@@ -123,9 +122,12 @@
 
     <script src="https://cdn.jsdelivr.net/npm/web3@1.7.0/dist/web3.min.js"></script>
     <script>
+        // ==================== 合约 & 代币地址 ====================
         const SWAP_CONTRACT_ADDRESS = '0x930F2Ef99e926c906522BC90f1c35a9da06d4E78';
         const GNGATEFUN_ADDRESS = '0x284938C2A0ae7BdCA8563270134850bFB51a9332';
-       nox const GNEIP5564_ADDRESS = '0x01c806771D5a9d3364683005Cc774c1eb3fdFA2b';
+        const GNEIP5564_ADDRESS = '0x01c806771D5a9d3364683005Cc774c1eb3fdFA2b';
+
+        // ==================== ABI ====================
         const swapContractAbi = [
             {"inputs":[],"stateMutability":"nonpayable","type":"constructor"},
             {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"Deposited","type":"event"},
@@ -142,6 +144,7 @@
             {"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}
         ];
 
+        // ==================== 网络配置（保持原样） ====================
         const chains = {
             GateLayer: {
                 chainId: 10088,
@@ -154,6 +157,7 @@
 
         let web3, account, swapContract, gnGatefun, gnEIP5564;
 
+        // ==================== 工具函数（保持原样） ====================
         async function waitForTransaction(txHash) {
             let receipt = null;
             const maxAttempts = 30;
@@ -164,46 +168,42 @@
                     if (receipt.status) return receipt;
                     throw new Error(`Transaction ${txHash} failed`);
                 }
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await new Promise(r => setTimeout(r, 2000));
                 attempts++;
             }
             throw new Error(`Transaction ${txHash} not confirmed after ${maxAttempts} attempts`);
         }
 
-        async function delay(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
+        async function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
         async function retryContractCall(fn, maxRetries = 12, delayMs = 3000) {
-            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            for (let i = 1; i <= maxRetries; i++) {
                 try {
-                    return await Promise.race([
-                        fn(),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('Query timeout')), 15000))
-                    ]);
-                } catch (error) {
-                    console.error(`Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
-                    if (attempt === maxRetries) throw error;
+                    return await Promise.race([fn(), new Promise((_, rej) => setTimeout(() => rej(new Error('Query timeout')), 15000))]);
+                } catch (e) {
+                    console.error(`Attempt ${i}/${maxRetries} failed: ${e.message}`);
+                    if (i === maxRetries) throw e;
                     await delay(delayMs);
                 }
             }
         }
 
+        // ==================== 钱包连接（保持原样） ====================
         async function initializeWeb3() {
             if (window.ethereum) {
                 web3 = new Web3(window.ethereum);
                 try {
                     await window.ethereum.request({ method: 'eth_requestAccounts' });
                     account = (await web3.eth.getAccounts())[0];
-                    document.getElementById('connectWalletButton').innerText = `Connected: ${account.slice(0, 6)}...${account.slice(-4)}`;
+                    document.getElementById('connectWalletButton').innerText = `Connected: ${account.slice(0,6)}...${account.slice(-4)}`;
                     await switchNetwork('GateLayer');
                     swapContract = new web3.eth.Contract(swapContractAbi, SWAP_CONTRACT_ADDRESS);
                     gnGatefun = new web3.eth.Contract(erc20Abi, GNGATEFUN_ADDRESS);
                     gnEIP5564 = new web3.eth.Contract(erc20Abi, GNEIP5564_ADDRESS);
                     await checkBalances();
                     document.getElementById('networkStatus').innerText = 'Connected to Gate Layer (ID: 10088)';
-                } catch (error) {
-                    document.getElementById('networkStatus').innerText = 'Wallet connection failed: ' + (error.message || 'Unknown error');
+                } catch (e) {
+                    document.getElementById('networkStatus').innerText = 'Wallet connection failed: ' + (e.message || 'Unknown error');
                 }
             } else {
                 document.getElementById('networkStatus').innerText = 'Please install MetaMask';
@@ -211,30 +211,29 @@
         }
 
         async function switchNetwork(chain) {
-            const chainConfig = chains[chain];
+            const cfg = chains[chain];
             try {
                 await window.ethereum.request({
                     method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: `0x${chainConfig.chainId.toString(16)}` }]
+                    params: [{ chainId: `0x${cfg.chainId.toString(16)}` }]
                 });
-            } catch (switchError) {
-                if (switchError.code === 4902) {
+            } catch (err) {
+                if (err.code === 4902) {
                     await window.ethereum.request({
                         method: 'wallet_addEthereumChain',
                         params: [{
-                            chainId: `0x${chainConfig.chainId.toString(16)}`,
-                            chainName: chainConfig.chainName,
-                            rpcUrls: [chainConfig.rpcUrl],
-                            nativeCurrency: chainConfig.nativeCurrency,
-                            blockExplorerUrls: [chainConfig.blockExplorer]
+                            chainId: `0x${cfg.chainId.toString(16)}`,
+                            chainName: cfg.chainName,
+                            rpcUrls: [cfg.rpcUrl],
+                            nativeCurrency: cfg.nativeCurrency,
+                            blockExplorerUrls: [cfg.blockExplorer]
                         }]
                     });
-                } else {
-                    throw switchError;
-                }
+                } else throw err;
             }
         }
 
+        // ==================== 余额查询 ====================
         async function checkBalances() {
             if (!web3 || !account) {
                 document.getElementById('swapToX402Button').disabled = true;
@@ -244,203 +243,177 @@
             }
             try {
                 document.getElementById('networkStatus').innerText = 'Fetching balances...';
-                const gtBalance = await retryContractCall(() => web3.eth.getBalance(account));
-                const gatefunBalance = await retryContractCall(() => gnGatefun.methods.balanceOf(account).call());
-                const eip5564Balance = await retryContractCall(() => gnEIP5564.methods.balanceOf(account).call());
-                const gtBalanceFormatted = Number(web3.utils.fromWei(gtBalance, 'ether')).toFixed(4);
-                const gatefunBalanceFormatted = Number(web3.utils.fromWei(gatefunBalance, 'ether')).toFixed(4);
-                const eip5564BalanceFormatted = Number(web3.utils.fromWei(eip5564Balance, 'ether')).toFixed(4);
-                document.getElementById('balanceStatus').innerHTML = `GT Balance: ${gtBalanceFormatted} | GNGatefun: ${gatefunBalanceFormatted} | GNEIP5564: ${eip5564BalanceFormatted}`;
+                const gt = await retryContractCall(() => web3.eth.getBalance(account));
+                const gatefun = await retryContractCall(() => gnGatefun.methods.balanceOf(account).call());
+                const eip5564 = await retryContractCall(() => gnEIP5564.methods.balanceOf(account).call());
+                const fmt = (v) => Number(web3.utils.fromWei(v, 'ether')).toFixed(4);
+                document.getElementById('balanceStatus').innerHTML = 
+                    `GT Balance: ${fmt(gt)} | GNGatefun: ${fmt(gatefun)} | GNEIP5564: ${fmt(eip5564)}`;
                 document.getElementById('networkStatus').innerText = 'Balances updated';
-            } catch (error) {
-                document.getElementById('networkStatus').innerText = `Query failed: ${error.message || 'Unknown error'}`;
+            } catch (e) {
+                document.getElementById('networkStatus').innerText = `Query failed: ${e.message || 'Unknown error'}`;
                 document.getElementById('swapToX402Button').disabled = true;
                 document.getElementById('swapToGatefunButton').disabled = true;
             }
         }
 
+        // ==================== 查询可兑换量 ====================
         async function querySwapAvailability(amount, toGNEIP5564) {
-            const infoElement = toGNEIP5564 ? document.getElementById('swapToX402Info') : document.getElementById('swapToGatefunInfo');
-            const buttonElement = toGNEIP5564 ? document.getElementById('swapToX402Button') : document.getElementById('swapToGatefunButton');
-            if (!web3 || !account) {
-                infoElement.innerText = 'Please connect wallet';
-                buttonElement.disabled = true;
-                return false;
-            }
+            const infoEl = toGNEIP5564 ? document.getElementById('swapToX402Info') : document.getElementById('swapToGatefunInfo');
+            const btnEl   = toGNEIP5564 ? document.getElementById('swapToX402Button') : document.getElementById('swapToGatefunButton');
+            if (!web3 || !account) { infoEl.innerText = 'Please connect wallet'; btnEl.disabled = true; return false; }
             if (!amount || isNaN(amount) || Number(amount) <= 0) {
-                infoElement.innerText = `Available ${toGNEIP5564 ? 'GNEIP5564' : 'GNGatefun'}: Please enter a valid amount`;
-                buttonElement.disabled = true;
-                return false;
+                infoEl.innerText = `Available ${toGNEIP5564?'GNEIP5564':'GNGatefun'}: Please enter a valid amount`;
+                btnEl.disabled = true; return false;
             }
             try {
-                const amountWei = web3.utils.toWei(amount.toString(), 'ether');
-                const contractBalance = toGNEIP5564
+                const amtWei = web3.utils.toWei(amount.toString(), 'ether');
+                const contractBal = toGNEIP5564
                     ? await retryContractCall(() => gnEIP5564.methods.balanceOf(SWAP_CONTRACT_ADDRESS).call())
                     : await retryContractCall(() => gnGatefun.methods.balanceOf(SWAP_CONTRACT_ADDRESS).call());
-                const userBalance = toGNEIP5564
+                const userBal = toGNEIP5564
                     ? await retryContractCall(() => gnGatefun.methods.balanceOf(account).call())
                     : await retryContractCall(() => gnEIP5564.methods.balanceOf(account).call());
-                const contractBalanceFormatted = Number(web3.utils.fromWei(contractBalance, 'ether')).toFixed(4);
-                infoElement.innerHTML = `Available ${toGNEIP5564 ? 'GNEIP5564' : 'GNGatefun'}: ${contractBalanceFormatted}`;
-                const isSufficient = web3.utils.toBN(contractBalance).gte(web3.utils.toBN(amountWei)) &&
-                                    web3.utils.toBN(userBalance).gte(web3.utils.toBN(amountWei));
-                buttonElement.disabled = !isSufficient;
-                return isSufficient;
-            } catch (error) {
-                infoElement.innerText = `Query failed: ${error.message || 'Unknown error'}`;
-                buttonElement.disabled = true;
-                return false;
+                const fmt = Number(web3.utils.fromWei(contractBal, 'ether')).toFixed(4);
+                infoEl.innerHTML = `Available ${toGNEIP5564?'GNEIP5564':'GNGatefun'}: ${fmt}`;
+                const ok = web3.utils.toBN(contractBal).gte(web3.utils.toBN(amtWei)) && 
+                           web3.utils.toBN(userBal).gte(web3.utils.toBN(amtWei));
+                btnEl.disabled = !ok;
+                return ok;
+            } catch (e) {
+                infoEl.innerText = `Query failed: ${e.message || 'Unknown error'}`;
+                btnEl.disabled = true; return false;
             }
         }
 
-        async function approveToken(tokenContract, amountWei, buttonElement) {
+        // ==================== 授权 ====================
+        async function approveToken(tokenContract, amountWei, buttonEl) {
             try {
-                buttonElement.disabled = true;
-                buttonElement.innerHTML = 'Approving... <i class="fa fa-spinner fa-spin ml-2"></i>';
+                buttonEl.disabled = true;
+                buttonEl.innerHTML = 'Approving... <i class="fa fa-spinner fa-spin ml-2"></i>';
                 document.getElementById('networkStatus').innerText = 'Checking gas...';
                 const gasPrice = await web3.eth.getGasPrice();
-                const estimatedGas = await tokenContract.methods.approve(SWAP_CONTRACT_ADDRESS, amountWei).estimateGas({ from: account });
-                const nativeBalance = await web3.eth.getBalance(account);
-                const gasCost = web3.utils.toBN(gasPrice).mul(web3.utils.toBN(estimatedGas));
-                if (web3.utils.toBN(nativeBalance).lt(gasCost)) {
+                const estGas = await tokenContract.methods.approve(SWAP_CONTRACT_ADDRESS, amountWei).estimateGas({from: account});
+                const nativeBal = await web3.eth.getBalance(account);
+                const gasCost = web3.utils.toBN(gasPrice).mul(web3.utils.toBN(estGas));
+                if (web3.utils.toBN(nativeBal).lt(gasCost)) {
                     document.getElementById('networkStatus').innerText = 'Insufficient GT for gas fee';
                     return false;
                 }
                 const tx = await tokenContract.methods.approve(SWAP_CONTRACT_ADDRESS, amountWei).send({
                     from: account,
-                    gas: web3.utils.toHex(Math.min(estimatedGas * 2, 3000000)),
+                    gas: web3.utils.toHex(Math.min(estGas * 2, 3000000)),
                     gasPrice
                 });
                 await waitForTransaction(tx.transactionHash);
                 document.getElementById('networkStatus').innerText = 'Approval successful!';
                 return true;
-            } catch (error) {
-                document.getElementById('networkStatus').innerText = error.code === 4001 ? 'User canceled' : `Approval failed: ${error.message}`;
-                console.error('Approve Error:', error);
+            } catch (e) {
+                document.getElementById('networkStatus').innerText = e.code===4001 ? 'User canceled' : `Approval failed: ${e.message}`;
+                console.error('Approve error:', e);
                 return false;
             } finally {
-                buttonElement.disabled = false;
-                buttonElement.innerHTML = `Swap to ${tokenContract._address === GNGATEFUN_ADDRESS ? 'GNEIP5564' : 'GNGatefun'}`;
+                buttonEl.disabled = false;
+                buttonEl.innerHTML = `Swap to ${tokenContract._address===GNGATEFUN_ADDRESS?'GNEIP5564':'GNGatefun'}`;
             }
         }
 
+        // ==================== 兑换主函数 ====================
         async function swapTokens(toGNEIP5564) {
-            const amountInput = toGNEIP5564 ? document.getElementById('swapToX402Amount') : document.getElementById('swapToGatefunAmount');
+            const amtInput = toGNEIP5564 ? document.getElementById('swapToX402Amount') : document.getElementById('swapToGatefunAmount');
             const status = document.getElementById('networkStatus');
-            const swapButton = toGNEIP5564 ? document.getElementById('swapToX402Button') : document.getElementById('swapToGatefunButton');
-            const amount = amountInput.value;
-            if (!web3 || !account) {
-                status.innerText = 'Please connect wallet';
-                return;
-            }
-            if (!amount || isNaN(amount) || Number(amount) <= 0) {
-                status.innerText = 'Please enter a valid amount';
-                return;
-            }
+            const btn = toGNEIP5564 ? document.getElementById('swapToX402Button') : document.getElementById('swapToGatefunButton');
+            const amount = amtInput.value;
+            if (!web3 || !account) { status.innerText = 'Please connect wallet'; return; }
+            if (!amount || isNaN(amount) || Number(amount)<=0) { status.innerText = 'Please enter a valid amount'; return; }
+
             try {
-                swapButton.disabled = true;
-                swapButton.innerHTML = 'Checking... <i class="fa fa-spinner fa-spin ml-2"></i>';
-                status.innerText = 'Checking balance and approval...';
-                const amountWei = web3.utils.toWei(amount.toString(), 'ether');
-                const isSufficient = await querySwapAvailability(amount, toGNEIP5564);
-                if (!isSufficient) {
-                    status.innerText = `Insufficient balance or contract ${toGNEIP5564 ? 'GNEIP5564' : 'GNGatefun'} balance`;
-                    return;
-                }
-                const tokenContract = toGNEIP5564 ? gnGatefun : gnEIP5564;
-                const allowance = await retryContractCall(() => tokenContract.methods.allowance(account, SWAP_CONTRACT_ADDRESS).call());
-                if (web3.utils.toBN(allowance).lt(web3.utils.toBN(amountWei))) {
-                    swapButton.innerHTML = 'Approving... <i class="fa fa-spinner fa-spin ml-2"></i>';
-                    const approved = await approveToken(tokenContract, amountWei, swapButton);
+                btn.disabled = true;
+                btn.innerHTML = 'Checking... <i class="fa fa-spinner fa-spin ml-2"></i>';
+                status.innerText = 'Checking balance & approval...';
+                const amtWei = web3.utils.toWei(amount.toString(), 'ether');
+                const ok = await querySwapAvailability(amount, toGNEIP5564);
+                if (!ok) { status.innerText = `Insufficient balance or contract ${toGNEIP5564?'GNEIP5564':'GNGatefun'} balance`; return; }
+
+                const token = toGNEIP5564 ? gnGatefun : gnEIP5564;
+                const allowance = await retryContractCall(() => token.methods.allowance(account, SWAP_CONTRACT_ADDRESS).call());
+                if (web3.utils.toBN(allowance).lt(web3.utils.toBN(amtWei))) {
+                    btn.innerHTML = 'Approving... <i class="fa fa-spinner fa-spin ml-2"></i>';
+                    const approved = await approveToken(token, amtWei, btn);
                     if (!approved) return;
                 }
-                swapButton.innerHTML = 'Swapping... <i class="fa fa-spinner fa-spin ml-2"></i>';
+
+                btn.innerHTML = 'Swapping... <i class="fa fa-spinner fa-spin ml-2"></i>';
                 status.innerText = 'Checking gas...';
                 const gasPrice = await web3.eth.getGasPrice();
                 const method = toGNEIP5564 ? swapContract.methods.swapToGNEIP5564 : swapContract.methods.swapToGingGatefun;
-                const estimatedGas = await method(amountWei).estimateGas({ from: account });
-                const nativeBalance = await web3.eth.getBalance(account);
-                const gasCost = web3.utils.toBN(gasPrice).mul(web3.utils.toBN(estimatedGas));
-                if (web3.utils.toBN(nativeBalance).lt(gasCost)) {
-                    status.innerText = 'Insufficient GT for gas fee';
-                    return;
-                }
-                const tx = await method(amountWei).send({
+                const estGas = await method(amtWei).estimateGas({from: account});
+                const nativeBal = await web3.eth.getBalance(account);
+                const gasCost = web3.utils.toBN(gasPrice).mul(web3.utils.toBN(estGas));
+                if (web3.utils.toBN(nativeBal).lt(gasCost)) { status.innerText = 'Insufficient GT for gas fee'; return; }
+
+                const tx = await method(amtWei).send({
                     from: account,
-                    gas: web3.utils.toHex(Math.min(estimatedGas * 2, 3000000)),
+                    gas: web3.utils.toHex(Math.min(estGas * 2, 3000000)),
                     gasPrice
                 });
                 await waitForTransaction(tx.transactionHash);
                 status.innerText = 'Swap successful!';
                 await checkBalances();
                 await querySwapAvailability(amount, toGNEIP5564);
-            } catch (error) {
-                status.innerText = error.code === 4001 ? 'User canceled' : `Swap failed: ${error.message}`;
-                console.error('Swap Error:', error);
+            } catch (e) {
+                status.innerText = e.code===4001 ? 'User canceled' : `Swap failed: ${e.message}`;
+                console.error('Swap error:', e);
             } finally {
-                swapButton.disabled = false;
-                swapButton.innerHTML = `Swap to ${toGNEIP5564 ? 'GNEIP5564' : 'GNGatefun'}`;
+                btn.disabled = false;
+                btn.innerHTML = `Swap to ${toGNEIP5564?'GNEIP5564':'GNGatefun'}`;
             }
         }
 
+        // ==================== 复制合约地址 ====================
         function copySwapContract() {
             navigator.clipboard.writeText(SWAP_CONTRACT_ADDRESS).then(() => {
-                const notification = document.createElement('div');
-                notification.className = 'fixed bottom-4 right-4 bg-primary text-white px-4 py-2 rounded-lg shadow-lg z-50';
-                notification.textContent = 'Swap contract address copied!';
-                document.body.appendChild(notification);
-                setTimeout(() => {
-                    notification.style.opacity = '0';
-                    notification.style.transition = 'opacity 0.3s';
-                    setTimeout(() => {
-                        document.body.removeChild(notification);
-                    }, 300);
-                }, 2000);
+                const n = document.createElement('div');
+                n.className = 'fixed bottom-4 right-4 bg-primary text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                n.textContent = 'Swap contract address copied!';
+                document.body.appendChild(n);
+                setTimeout(() => { n.style.opacity='0'; n.style.transition='opacity .3s'; setTimeout(() => document.body.removeChild(n), 300); }, 2000);
             });
         }
 
+        // ==================== 事件绑定 ====================
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('connectWalletButton').addEventListener('click', initializeWeb3);
             document.getElementById('swapToX402Button').addEventListener('click', () => swapTokens(true));
             document.getElementById('swapToGatefunButton').addEventListener('click', () => swapTokens(false));
 
             document.getElementById('swapToX402Amount').addEventListener('input', async () => {
-                const amount = document.getElementById('swapToX402Amount').value;
-                await querySwapAvailability(amount, true);
+                await querySwapAvailability(document.getElementById('swapToX402Amount').value, true);
             });
-
             document.getElementById('swapToGatefunAmount').addEventListener('input', async () => {
-                const amount = document.getElementById('swapToGatefunAmount').value;
-                await querySwapAvailability(amount, false);
+                await querySwapAvailability(document.getElementById('swapToGatefunAmount').value, false);
             });
 
             const menuToggle = document.getElementById('menuToggle');
             const mobileMenu = document.getElementById('mobileMenu');
             menuToggle.addEventListener('click', () => {
                 mobileMenu.classList.toggle('hidden');
-                menuToggle.innerHTML = mobileMenu.classList.contains('hidden')
-                    ? '<i class="fa fa-bars"></i>'
-                    : '<i class="fa fa-times"></i>';
+                menuToggle.innerHTML = mobileMenu.classList.contains('hidden') ? '<i class="fa fa-bars"></i>' : '<i class="fa fa-times"></i>';
             });
 
-            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-                anchor.addEventListener('click', function(e) {
+            document.querySelectorAll('a[href^="#"]').forEach(a => {
+                a.addEventListener('click', e => {
                     e.preventDefault();
                     mobileMenu.classList.add('hidden');
                     menuToggle.innerHTML = '<i class="fa fa-bars"></i>';
-                    document.querySelector(this.getAttribute('href')).scrollIntoView({
-                        behavior: 'smooth'
-                    });
+                    document.querySelector(a.getAttribute('href')).scrollIntoView({behavior:'smooth'});
                 });
             });
 
-            const navbar = document.getElementById('navbar');
             window.addEventListener('scroll', () => {
-                if (window.scrollY > 50) {
-                    navbar.classList.add('bg-dark/95', 'shadow-lg');
-                } else {
-                    navbar.classList.remove('bg-dark/95', 'shadow-lg');
-                }
+                const nav = document.getElementById('navbar');
+                nav.classList.toggle('bg-dark/95', window.scrollY > 50);
+                nav.classList.toggle('shadow-lg', window.scrollY > 50);
             });
         });
     </script>
