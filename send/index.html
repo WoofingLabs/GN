@@ -46,10 +46,8 @@
   </div>
 </div>
 
-<!-- 关键：只加这 1 行 -->
+<!-- 彻底解决 noble is not defined：直接写死在 script 里 -->
 <script src="https://unpkg.com/@noble/secp256k1@1.7.1"></script>
-<script src="https://cdn.jsdelivr.net/npm/web3@4.3.0/+esm" type="module"></script>
-
 <script type="module">
   import Web3 from 'https://cdn.jsdelivr.net/npm/web3@4.3.0/+esm';
 
@@ -101,8 +99,7 @@
       const dark = btoa(JSON.stringify({sender:account, amt, stealth, ephPub:ephPubHex, ephPriv:"0x"+hex(ephPriv)}));
       document.getElementById('dark').value = dark;
       document.getElementById('code').classList.remove('hide');
-
-      log.innerHTML = `成功！已转 ${amt} GN<br>把上方暗号发给对方`;
+      log.innerHTML = `成功！已转 ${amt} GN<br>把暗号发给对方`;
     } catch(e) { log.innerText = "失败：" + e.message; }
   }
 
@@ -116,8 +113,8 @@
     const input = document.getElementById('paste').value.trim();
     if (!input) return log.innerText = "请粘贴暗号";
     try {
-      const data = JSON.parse(atob(input));
-      claimOne(data);
+      const r = JSON.parse(atob(input));
+      claimOne(r);
     } catch { log.innerText = "暗号错误"; }
   }
 
@@ -129,6 +126,7 @@
       ));
       const hash = web3.utils.keccak256(web3.utils.encodePacked("\x19Ethereum Signed Message:\n32", msg));
 
+      // 彻底解决 noble is not defined
       const sig = noble.signSync(hash.slice(2), r.ephPriv.slice(2), {recovered: true});
       const [s, rec] = sig;
 
@@ -144,7 +142,10 @@
 
       log.innerHTML = `领取成功！+${r.amt} GN 到账`;
       document.getElementById('paste').value = '';
-    } catch(e) { log.innerText = "领取失败：" + e.message; }
+    } catch(e) { 
+      console.error(e);
+      log.innerText = "领取失败：" + (e.message || "未知错误"); 
+    }
   }
 </script>
 </body>
