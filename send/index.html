@@ -46,34 +46,36 @@
   </div>
 </div>
 
-<!-- 关键：换成支持 signSync 的旧版 noble -->
-<script src="https://unpkg.com/@noble/secp256k1@1.7.1"></script>
+<!-- 你原来的钱包连接方式（100% 秒连） -->
 <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+<script src="https://unpkg.com/@noble/secp256k1@1.7.1"></script>
 
 <script>
 const CONTRACT = "0x13336e9d92eE3F7aBA8A5150A5DeB2FcD77EEB82";
-const ABI = [
+const ABI = [ /* 两个函数 */ 
   {"inputs":[{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"stealthTransfer","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"internalType":"address","name":"_sender","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"},{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"},{"internalType":"uint8","name":"v","type":"uint8"}],"name":"claimStealth","outputs":[],"stateMutability":"nonpayable","type":"function"}
 ];
 
 let web3, account, contract;
 const log = document.getElementById('log');
-const hex = a => Array.from(a, b => b.toString(16).padStart(2,'0')).join('');
+const hex = a=>Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');
 
+// 你原来的连接方式（秒连）
 document.getElementById('connect').onclick = async () => {
   if (!window.ethereum) return alert("请安装 MetaMask");
+  web3 = new Web3(window.ethereum);
+  await window.ethereum.request({ method: 'eth_requestAccounts' });
+  account = (await web3.eth.getAccounts())[0];
+  
+  // 自动切链
   try { await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]}); }
   catch { await ethereum.request({method:'wallet_addEthereumChain', params:[{
       chainId:'0x2768', chainName:'GateLayer', rpcUrls:['https://gatelayer-mainnet.gatenode.cc'],
       nativeCurrency:{name:'GT',symbol:'GT',decimals:18}
   }]}); }
 
-  const a = await ethereum.request({method:'eth_requestAccounts'});
-  account = a[0];
-  web3 = new Web3(ethereum);
   contract = new web3.eth.Contract(ABI, CONTRACT);
-
   document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,8) + '...';
   document.getElementById('form').classList.remove('hide');
   document.getElementById('send').onclick = send;
@@ -95,11 +97,9 @@ async function send() {
   log.innerText = "请确认 gas...";
   try {
     await contract.methods.stealthTransfer(stealth, ephPubHex, web3.utils.toWei(amt,"ether")).send({from: account});
-
     const dark = btoa(JSON.stringify({sender:account, amt, stealth, ephPub:ephPubHex, ephPriv:"0x"+hex(ephPriv)}));
     document.getElementById('dark').value = dark;
     document.getElementById('code').classList.remove('hide');
-
     log.innerHTML = `成功！已转 ${amt} GN<br>把暗号发给对方`;
   } catch(e) { log.innerText = "失败：" + e.message; }
 }
@@ -114,35 +114,22 @@ function claimFromInput() {
   const input = document.getElementById('paste').value.trim();
   if (!input) return log.innerText = "请粘贴暗号";
   try {
-    const data = JSON.parse(atob(input));
-    claimOne(data);
-  } catch { log.innerText = "暗号错误"; }
-}
-
-async function claimOne(r) {
-  log.innerText = "请确认 gas...";
-  try {
+    const r = JSON.parse(atob(input));
+    log.innerText = "请确认 gas...";
     const msg = web3.utils.keccak256(web3.utils.encodePacked(
       r.sender, web3.utils.toWei(r.amt,"ether"), r.stealth, r.ephPub
     ));
     const hash = web3.utils.keccak256(web3.utils.encodePacked("\x19Ethereum Signed Message:\n32", msg));
-
     const sig = noble.signSync(hash.slice(2), r.ephPriv.slice(2), {recovered: true});
     const [s, rec] = sig;
 
-    await contract.methods.claimStealth(
-      r.sender,
-      web3.utils.toWei(r.amt,"ether"),
-      r.stealth,
-      r.ephPub,
-      "0x"+hex(s.slice(0,32)),
-      "0x"+hex(s.slice(32,64)),
-      rec + 27
-    ).send({from: account});
-
-    log.innerHTML = `领取成功！+${r.amt} GN 到账`;
-    document.getElementById('paste').value = '';
-  } catch(e) { log.innerText = "领取失败：" + e.message; }
+    contract.methods.claimStealth(
+      r.sender, web3.utils.toWei(r.amt,"ether"), r.stealth, r.ephPub,
+      "0x"+hex(s.slice(0,32)), "0x"+hex(s.slice(32,64)), rec + 27
+    ).send({from: account})
+    .then(() => { log.innerHTML = `领取成功！+${r.amt} GN 到账`; document.getElementById('paste').value = ''; })
+    .catch(e => log.innerText = "领取失败：" + e.message);
+  } catch { log.innerText = "暗号错误"; }
 }
 </script>
 </body>
