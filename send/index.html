@@ -3,31 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GN 隐私转账</title>
+  <title>GN 真·隐私转账</title>
   <link rel="icon" href="https://raw.githubusercontent.com/WoofingLabs/Grabbit/refs/heads/main/images/GN.png">
   <style>
     body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem}
-    .c{max-width:420px;width:100%;background:#111;border:1px solid #0ff4;border-radius:28px;padding:2.5rem;box-shadow:0 0 50px #0ff3}
-    .logo{width:90px;height:90px;border-radius:50%;box-shadow:0 0 40px #80f;display:block;margin:0 auto 1rem}
-    h1{font-size:2.2rem;text-align:center;background:linear-gradient(135deg,#00d1ff,#8b00ff);-webkit-background-clip:text;color:transparent}
-    input,button{width:100%;height:58px;border-radius:16px;margin:10px 0;padding:0 1.3rem;font-size:1rem}
+    .c{max-width:420px;width:100%;background:#111;border:2px solid #00d1ff;border-radius:28px;padding:2.5rem;box-shadow:0 0 60px #00d1ff40}
+    .logo{width:100px;height:100px;border-radius:50%;box-shadow:0 0 50px #8b00ff;display:block;margin:0 auto 1rem}
+    h1{font-size:2.4rem;text-align:center;background:linear-gradient(135deg,#00d1ff,#8b00ff);-webkit-background-clip:text;color:transparent}
+    input,button{width:100%;height:60px;border-radius:18px;margin:12px 0;padding:0 1.4rem;font-size:1.1rem}
     input{background:#000;border:1px solid #333;color:#fff;outline:none}
     button{background:linear-gradient(135deg,#00d1ff,#8b00ff);border:none;color:#000;font-weight:900;cursor:pointer}
-    #log{text-align:center;margin-top:1rem;min-height:28px;color:#0f0;font-size:0.95rem}
+    #log{text-align:center;margin-top:1rem;min-height:32px;color:#0f0;font-size:1rem;line-height:1.5}
   </style>
 </head>
 <body>
 <div class="c">
   <img src="https://raw.githubusercontent.com/WoofingLabs/Grabbit/refs/heads/main/images/GN.png" class="logo">
   <h1>GN 隐私转账</h1>
-  <p style="text-align:center;color:#888;margin:1rem 0">链上零痕迹 · 一键领</p>
+  <p style="text-align:center;color:#888;margin:1rem 0">链上零地址 · 真隐私</p>
 
   <button id="connect">连接钱包</button>
 
   <div id="form" style="display:none">
-    <input id="to" placeholder="对方地址 0x...">
-    <input id="amt" placeholder="GN 数量" type="number" step="any">
-    <button id="send">立即隐身转账</button>
+    <input id="to" placeholder="对方钱包地址">
+    <input id="amt" placeholder="转账 GN 数量" type="number" step="any">
+    <button id="send">隐身转账</button>
     <button id="claim">一键领取</button>
     <div id="log"></div>
   </div>
@@ -37,17 +37,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.0.0/dist/index.js"></script>
 
 <script>
-// 关键修复 1：等待 noble 准备好
-async function waitNoble() {
-  if (!noble.ready) await new Promise(r => setTimeout(r, 100));
-  while (!noble.ready) await new Promise(r => setTimeout(r, 50));
-}
-
-// 关键修复 2：用 Uint8Array 代替 Buffer
-function hex(buf) {
-  return Array.from(buf).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-
 const CONTRACT = "0x13336e9d92eE3F7aBA8A5150A5DeB2FcD77EEB82";
 let web3, account, contract;
 const log = document.getElementById('log');
@@ -62,7 +51,6 @@ document.getElementById('connect').onclick = async () => {
       nativeCurrency:{name:'GT',symbol:'GT',decimals:18}
     }]});
   }
-
   const a = await ethereum.request({method:'eth_requestAccounts'});
   account = a[0];
   web3 = new Web3(ethereum);
@@ -80,29 +68,37 @@ document.getElementById('connect').onclick = async () => {
 async function send() {
   const to = document.getElementById('to').value.trim();
   const amt = document.getElementById('amt').value;
-  if (!web3.utils.isAddress(to)) return log.innerText = "地址错";
-  if (!amt || amt <= 0) return log.innerText = "填金额";
+  if (!web3.utils.isAddress(to)) return log.innerText = "地址错误";
+  if (!amt || amt <= 0) return log.innerText = "输入金额";
 
-  log.innerText = "生成钥匙...";
-  await waitNoble();   // 必须等！
-
+  log.innerText = "生成隐私钥匙...";
+  
+  // 关键：等待 noble 加载
+  while (!noble.getPublicKey) await new Promise(r => setTimeout(r, 50));
+  
   const ephPriv = noble.utils.randomPrivateKey();
-  const ephPub = noble.getPublicKey(ephPriv, false); // 65 bytes
-  const stealth = "0x" + hex(ephPub.slice(1)).padStart(64, '0');
-  const ephPubHex = "0x" + hex(ephPub);
+  const ephPub = noble.getPublicKey(ephPriv, false);
+  const stealth = "0x" + Array.from(ephPub.slice(1)).map(b=>b.toString(16).padStart(2,'0')).join('').padStart(64,'0');
+  const ephPubHex = "0x" + Array.from(ephPub).map(b=>b.toString(16).padStart(2,'0')).join('');
 
   const wei = web3.utils.toWei(amt, "ether");
   log.innerText = "发送中...";
 
   try {
     await contract.methods.stealthTransfer(stealth, ephPubHex, wei).send({from: account});
-
-    const rec = {sender:account, amt, stealth, ephPub:ephPubHex, ephPriv:"0x"+hex(ephPriv)};
-    let list = JSON.parse(localStorage.getItem("gn")||"[]");
+    
+    const rec = {
+      sender: account,
+      amt: amt,
+      stealth: stealth,
+      ephPub: ephPubHex,
+      ephPriv: "0x" + Array.from(ephPriv).map(b=>b.toString(16).padStart(2,'0')).join('')
+    };
+    let list = JSON.parse(localStorage.getItem("gn_privacy")||"[]");
     list.push(rec);
-    localStorage.setItem("gn", JSON.stringify(list));
+    localStorage.setItem("gn_privacy", JSON.stringify(list));
 
-    log.innerHTML = `成功！已转 ${amt} GN<br>快叫对方点“一键领取”`;
+    log.innerHTML = `隐私转账成功！<br>已转 ${amt} GN<br>对方地址永不暴露！`;
     document.getElementById('amt').value = '';
   } catch(e) {
     log.innerText = "失败：" + e.message;
@@ -110,20 +106,17 @@ async function send() {
 }
 
 async function claim() {
-  const list = JSON.parse(localStorage.getItem("gn")||"[]");
-  if (!list.length) return log.innerText = "没有可领的";
+  const list = JSON.parse(localStorage.getItem("gn_privacy")||"[]");
+  if (!list.length) return log.innerText = "没有可领取的 GN";
 
-  log.innerText = "领取中...";
-  await waitNoble();   // 必须等！
-
+  log.innerText = "悄悄领取中...";
+  while (!noble.getPublicKey) await new Promise(r => setTimeout(r, 50));
+  
   let total = 0;
   for (const r of list) {
     try {
       const msg = web3.utils.keccak256(web3.utils.encodePacked(
-        r.sender,
-        web3.utils.toWei(r.amt,"ether"),
-        r.stealth,
-        r.ephPub
+        r.sender, web3.utils.toWei(r.amt,"ether"), r.stealth, r.ephPub
       ));
       const hash = web3.utils.keccak256(web3.utils.encodePacked(
         "\x19Ethereum Signed Message:\n32", msg
@@ -137,16 +130,16 @@ async function claim() {
         web3.utils.toWei(r.amt,"ether"),
         r.stealth,
         r.ephPub,
-        "0x"+hex(s.slice(0,32)),
-        "0x"+hex(s.slice(32,64)),
+        "0x"+Array.from(s.slice(0,32)).map(b=>b.toString(16).padStart(2,'0')).join(''),
+        "0x"+Array.from(s.slice(32,64)).map(b=>b.toString(16).padStart(2,'0')).join(''),
         rec + 27
       ).send({from: account});
 
       total += parseFloat(r.amt);
-    } catch(e) { console.log(e); }
+    } catch(e) { console.log("已领", e); }
   }
-  localStorage.setItem("gn", "[]");
-  log.innerHTML = `领完！共 +${total} GN 到账`;
+  localStorage.setItem("gn_privacy", "[]");
+  log.innerHTML = `领取成功！<br>共 +${total} GN 悄悄到账`;
 }
 </script>
 </body>
