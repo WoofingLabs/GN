@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GN 隐身转账</title>
+  <link rel="icon" href="https://raw.githubusercontent.com/WoofingLabs/Grabbit/refs/heads/main/images/GN.png">
+  <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/secp256k1@4.0.3/lib/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@noble/secp256k1@1.7.1/dist/index.min.js"></script>
+  <style>
+    body{font-family:system-ui;background:#000;color:#fff;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem}
+    .c{backdrop-filter:blur(12px);background:#111a;border:1px solid #00d1ff30;border-radius:24px;padding:2rem;max-width:420px;width:100%;box-shadow:0 0 40px #00d1ff20}
+    input,button{height:56px;border-radius:16px;padding:0 1.2rem;font-size:1rem;margin:0.5rem 0}
+    input{background:#000;border:1px solid #333;color:#fff;width:100%;outline:none}
+    input:focus{border-color:#8b00ff}
+    button{background:linear-gradient(135deg,#00d1ff,#8b00ff);border:none;color:#000;font-weight:800;cursor:pointer}
+    button:disabled{opacity:0.5;cursor:not-allowed}
+    .logo{width:80px;height:80px;border-radius:50%;box-shadow:0 0 30px #8b00ff}
+    .qr{margin:1rem 0;text-align:center}
+    .hide{display:none}
+  </style>
+</head>
+<body>
+
+<div class="c">
+  <div class="text-center mb-8">
+    <img src="https://raw.githubusercontent.com/WoofingLabs/Grabbit/refs/heads/main/images/GN.png" class="logo">
+    <h1 style="font-size:2rem;margin:1rem 0;background:linear-gradient(135deg,#00d1ff,#8b00ff);-webkit-background-clip:text;color:transparent">
+      GN 隐身转账
+    </h1>
+    <p style="color:#888">ERC-5564 标准 · 链上零痕迹</p>
+  </div>
+
+  <button id="connect">连接钱包 (GateLayer)</button>
+
+  <div id="form" class="hide">
+    <input id="amount" placeholder="转账 GN 数量（如 520）" type="number" step="0.000000000000000001">
+    <button id="gen">生成隐身收款码</button>
+
+    <div id="receive" class="hide text-center">
+      <p>发给对方扫码/复制：</p>
+      <div id="qr" class="qr"></div>
+      <input id="code" readonly onclick="this.select()">
+      <button onclick="copy()">复制收款码</button>
+    </div>
+
+    <button id="send">立即隐身转账</button>
+    <button id="claim">我收到码，悄悄领</button>
+    <p id="status" class="text-center mt-4" style="min-height:24px;color:#0f0"></p>
+  </div>
+</div>
+
+<script>
+const CONTRACT = "0x01c806771D5a9d3364683005Cc774c1eb3fdFA2b";
+const ABI = [{"inputs":[{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"stealthTransfer","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_sender","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"},{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"},{"internalType":"uint8","name":"v","type":"uint8"}],"name":"claimStealth","outputs":[],"stateMutability":"nonpayable","type":"function"}];
+
+let web3, account, contract;
+
+async function init() {
+  if (!window.ethereum) return alert("请安装 MetaMask");
+  web3 = new Web3(window.ethereum);
+  await switchChain();
+  document.getElementById("connect").onclick = connect;
+}
+async function switchChain() {
+  try {
+    await ethereum.request({method: 'wallet_switchEthereumChain', params: [{chainId: '0x2768'}]});
+  } catch { await ethereum.request({method: 'wallet_addEthereumChain', params: [{chainId:'0x2768',chainName:'GateLayer',rpcUrls:['https://gatelayer-mainnet.gatenode.cc'],nativeCurrency:{name:'GT',symbol:'GT',decimals:18}}]}); }
+}
+async function connect() {
+  const accounts = await ethereum.request({method:'eth_requestAccounts'});
+  account = accounts[0];
+  contract = new web3.eth.Contract(ABI, CONTRACT);
+  document.getElementById("connect").innerHTML = `已连接 ${account.slice(0,6)}...${account.slice(-4)}`;
+  document.getElementById("form").classList.remove("hide");
+  document.getElementById("gen").onclick = genQR;
+  document.getElementById("send").onclick = send;
+  document.getElementById("claim").onclick = claim;
+}
+function genQR() {
+  const priv = noble.utils.randomPrivateKey();
+  const pub = noble.getPublicKey(priv, true);
+  const stealth = "0x" + Buffer.from(pub.slice(1)).toString('hex').padStart(64,'0');
+  const code = btoa(JSON.stringify({stealth, pub: "0x"+Buffer.from(pub).toString('hex'), priv: "0x"+Buffer.from(priv).toString('hex')}));
+  document.getElementById("code").value = code;
+  new QRCode(document.getElementById("qr"), {text:code,width:200,height:200});
+  document.getElementById("receive").classList.remove("hide");
+}
+function copy() { document.getElementById("code").select(); document.execCommand("copy"); alert("已复制！发给对方即可"); }
+async function send() {
+  const amt = document.getElementById("amount").value;
+  if (!amt || amt <= 0) return alert("输入金额");
+  const code = document.getElementById("code").value;
+  if (!code) return alert("先生成收款码");
+  const {stealth, pub} = JSON.parse(atob(code));
+  const amount = web3.utils.toWei(amt, "ether");
+  document.getElementById("status").innerText = "发送中...";
+  try {
+    await contract.methods.stealthTransfer(stealth, pub, amount).send({from: account});
+    document.getElementById("status").innerText = "隐身转账成功！对方可私下领走";
+  } catch(e) { document.getElementById("status").innerText = "失败：" + e.message; }
+}
+async function claim() {
+  const code = prompt("粘贴你收到的收款码");
+  if (!code) return;
+  try {
+    const {stealth, pub, priv} = JSON.parse(atob(code));
+    const amount = prompt("输入转账金额（GN）");
+    const sender = prompt("输入转账人地址");
+    const msg = web3.utils.soliditySha256(["address","uint256","bytes32","bytes"], [sender, web3.utils.toWei(amount,"ether"), stealth, pub]);
+    const msgHash = web3.utils.soliditySha256(["string","bytes32"], ["\x19Ethereum Signed Message:\n32", msg]);
+    const sig = noble.sign(msgHash.slice(2), priv.slice(2));
+    const r = "0x" + sig.slice(0,32).toString('hex');
+    const s = "0x" + sig.slice(32,64).toString('hex');
+    const v = sig[64] + 27;
+    document.getElementById("status").innerText = "领取中...";
+    await contract.methods.claimStealth(sender, web3.utils.toWei(amount,"ether"), stealth, pub, r, s, v).send({from: account});
+    document.getElementById("status").innerText = "悄悄领走成功！余额已到账";
+  } catch(e) { alert("领取失败：" + e.message); }
+}
+init();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+</body>
+</html>
