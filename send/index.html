@@ -8,15 +8,17 @@
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem}
-    .box{max-width:400px;width:100%;background:#111;border:1px solid #00d1ff30;border-radius:24px;padding:2rem;box-shadow:0 0 40px #00d1ff20}
-    h1{font-size:2rem;text-align:center;margin:1rem 0;background:linear-gradient(135deg,#00d1ff,#8b00ff);-webkit-background-clip:text;color:transparent}
-    input,button{width:100%;height:56px;border-radius:16px;margin:0.5rem 0;padding:0 1.2rem;font-size:1rem;outline:none}
-    input{background:#000;border:1px solid #333;color:#fff}
+    .box{max-width:420px;width:100%;background:#111;border:1px solid #00d1ff40;border-radius:28px;padding:2.5rem;box-shadow:0 0 50px #00d1ff30}
+    .logo{width:90px;height:90px;border-radius:50%;box-shadow:0 0 40px #8b00ff;display:block;margin:0 auto 1.5rem}
+    h1{font-size:2.2rem;text-align:center;background:linear-gradient(135deg,#00d1ff,#8b00ff);-webkit-background-clip:text;color:transparent;margin-bottom:.5rem}
+    p{font-size:.95rem;text-align:center;color:#888;margin-bottom:1.5rem}
+    input{width:100%;height:58px;border-radius:16px;padding:0 1.3rem;margin:10px 0;background:#000;border:1px solid #333;color:#fff;font-size:1rem;outline:none}
     input:focus{border-color:#8b00ff}
-    button{background:linear-gradient(135deg,#00d1ff,#8b00ff);border:none;color:#000;font-weight:800;cursor:pointer}
+    button{width:100%;height:58px;border-radius:16px;margin:10px 0;background:linear-gradient(135deg,#00d1ff,#8b00ff);border:none;color:#000;font-weight:900;font-size:1.1rem;cursor:pointer;transition:.2s}
+    button:hover{transform:scale(1.02)}
     button:disabled{opacity:0.5;cursor:not-allowed}
-    .logo{width:80px;height:80px;border-radius:50%;box-shadow:0 0 30px #8b00ff;display:block;margin:0 auto 1rem}
-    #log{text-align:center;margin-top:1rem;min-height:24px;font-size:0.9rem;color:#0f0}
+    #log{text-align:center;margin-top:1rem;min-height:28px;font-size:.95rem;color:#0f0;line-height:1.4}
+    .hide{display:none}
   </style>
 </head>
 <body>
@@ -24,13 +26,13 @@
 <div class="box">
   <img src="https://raw.githubusercontent.com/WoofingLabs/Grabbit/refs/heads/main/images/GN.png" class="logo">
   <h1>GN 隐私转账</h1>
-  <p style="text-align:center;color:#888;font-size:0.9rem">链上零痕迹 · 一键领</p>
+  <p>链上零痕迹 · 一键领</p>
 
   <button id="connect">连接钱包 (GateLayer)</button>
 
-  <div id="form" style="display:none;margin-top:1rem">
-    <input id="to" placeholder="对方钱包地址 0x..." />
-    <input id="amt" placeholder="转账 GN 数量" type="number" step="any" />
+  <div id="form" class="hide">
+    <input id="to" placeholder="对方地址 0x...">
+    <input id="amt" placeholder="转账 GN 数量" type="number" step="any">
     <button id="send">立即隐身转账</button>
     <button id="claim">我收到隐转 → 一键领取</button>
     <div id="log"></div>
@@ -41,7 +43,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.0.0/dist/index.js"></script>
 
 <script>
-const CONTRACT = "0x01c806771D5a9d3364683005Cc774c1eb3fdFA2b";
+const CONTRACT = "0x13336e9d92eE3F7aBA8A5150A5DeB2FcD77EEB82";
 const ABI = [
   {"inputs":[{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"stealthTransfer","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"internalType":"address","name":"_sender","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"},{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"},{"internalType":"uint8","name":"v","type":"uint8"}],"name":"claimStealth","outputs":[],"stateMutability":"nonpayable","type":"function"}
@@ -71,8 +73,8 @@ async function connect() {
   account = accs[0];
   web3 = new Web3(ethereum);
   contract = new web3.eth.Contract(ABI, CONTRACT);
-  document.getElementById("connect").innerHTML = `已连接 ${account.slice(0,6)}...`;
-  document.getElementById("form").style.display = "block";
+  document.getElementById("connect").innerHTML = `已连接 ${account.slice(0,6)}...${account.slice(-4)}`;
+  document.getElementById("form").classList.remove("hide");
   document.getElementById("send").onclick = sendStealth;
   document.getElementById("claim").onclick = claimAll;
 }
@@ -87,73 +89,76 @@ async function sendStealth() {
   log.innerText = "生成隐身钥匙...";
   await noble.ready;
   const ephPriv = noble.utils.randomPrivateKey();
-  const ephPub = noble.getPublicKey(ephPriv, false); // 65 bytes uncompressed
+  const ephPub = noble.getPublicKey(ephPriv, false); // 65 bytes
   const stealth = "0x" + Buffer.from(ephPub.slice(1)).toString('hex').padStart(64, '0');
+  const ephPubHex = "0x" + Buffer.from(ephPub).toString('hex');
 
-  const amountWei = web3.utils.toWei(amt, "ether");
+  const wei = web3.utils.toWei(amt, "ether");
   log.innerText = "发送中...";
 
   try {
-    await contract.methods.stealthTransfer(
-      stealth,
-      "0x" + Buffer.from(ephPub).toString('hex'),
-      amountWei
-    ).send({from: account});
+    await contract.methods.stealthTransfer(stealth, ephPubHex, wei).send({from: account});
 
-    // 本地存一条“我的空投”
+    // 存本地记录
     const record = {
       sender: account,
       amount: amt,
       stealth,
-      ephPub: "0x" + Buffer.from(ephPub).toString('hex'),
+      ephPub: ephPubHex,
       ephPriv: "0x" + Buffer.from(ephPriv).toString('hex')
     };
-    const list = JSON.parse(localStorage.getItem("gn_airdrop") || "[]");
+    let list = JSON.parse(localStorage.getItem("gn_stealth") || "[]");
     list.push(record);
-    localStorage.setItem("gn_airdrop", JSON.stringify(list));
+    localStorage.setItem("gn_stealth", JSON.stringify(list));
 
-    log.innerHTML = `成功！<br>已转 ${amt} GN 给 ${to.slice(0,8)}...<br>告诉对方点“一键领取”`;
+    log.innerHTML = `隐身转账成功！<br>已转 ${amt} GN 给<br><small>${to}</small><br>快告诉对方点“一键领取”`;
     document.getElementById("amt").value = "";
   } catch (e) {
-    log.innerText = "失败：" + (e.message || e);
+    log.innerText = "失败：" + (e.message || "未知错误");
   }
 }
 
 // 一键领取全部
 async function claimAll() {
-  const list = JSON.parse(localStorage.getItem("gn_airdrop") || "[]");
-  if (list.length === 0) return log.innerText = "没有待领的 GN";
+  const list = JSON.parse(localStorage.getItem("gn_stealth") || "[]");
+  if (list.length === 0) return log.innerText = "没有可领取的 GN";
 
-  log.innerText = "领取中...";
+  log.innerText = "正在领取...";
   let total = 0;
   for (const r of list) {
     try {
-      const msg = web3.utils.soliditySha256(
-        ["address","uint256","bytes32","bytes"],
-        [r.sender, web3.utils.toWei(r.amount,"ether"), r.stealth, r.ephPub]
+      const message = web3.utils.keccak256(
+        web3.utils.encodePacked(
+          r.sender,
+          web3.utils.toWei(r.amount, "ether"),
+          r.stealth,
+          r.ephPub
+        )
       );
-      const hash = web3.utils.soliditySha256(
-        ["string","bytes32"],
-        ["\x19Ethereum Signed Message:\n32", msg]
+      const claimHash = web3.utils.keccak256(
+        web3.utils.encodePacked("\x19Ethereum Signed Message:\n32", message)
       );
-      const sig = noble.signSync(hash.slice(2), r.ephPriv.slice(2), {der: false, recovered: true});
-      const [signature, rec] = sig;
+
+      const sig = noble.signSync(claimHash.slice(2), r.ephPriv.slice(2), {der: false, recovered: true});
+      const [sigBytes, rec] = sig;
+
       await contract.methods.claimStealth(
         r.sender,
-        web3.utils.toWei(r.amount,"ether"),
+        web3.utils.toWei(r.amount, "ether"),
         r.stealth,
         r.ephPub,
-        "0x" + signature.slice(0,32).toString('hex'),
-        "0x" + signature.slice(32,64).toString('hex'),
+        "0x" + sigBytes.slice(0,32).toString('hex'),
+        "0x" + sigBytes.slice(32,64).toString('hex'),
         rec + 27
       ).send({from: account});
+
       total += parseFloat(r.amount);
     } catch (e) {
-      console.log("已领过或失败", e);
+      console.log("已领或失败", e);
     }
   }
-  localStorage.setItem("gn_airdrop", "[]");
-  log.innerHTML = `全部领完！<br>共 +${total} GN 到账`;
+  localStorage.setItem("gn_stealth", "[]");
+  log.innerHTML = `全部领取完成！<br>共 +${total.toFixed(6)} GN 到账`;
 }
 
 init();
