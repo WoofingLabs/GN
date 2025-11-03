@@ -20,13 +20,13 @@
 <div class="c">
   <img src="https://raw.githubusercontent.com/WoofingLabs/Grabbit/refs/heads/main/images/GN.png" class="logo">
   <h1>GN 隐私转账</h1>
-  <p style="text-align:center;color:#888;margin:1rem 0">链上零地址 · 一键领</p>
+  <p style="text-align:center;color:#888;margin:1rem 0">发钱/领钱 都弹 gas · 链上零地址</p>
 
   <button id="connect">连接钱包</button>
 
   <div id="form" style="display:none">
-    <input id="to" placeholder="对方钱包地址">
-    <input id="amt" placeholder="转账 GN 数量" type="number" step="any">
+    <input id="to" placeholder="对方地址">
+    <input id="amt" placeholder="GN 数量" type="number" step="any">
     <button id="send">隐身转账</button>
     <button id="claim">一键领取</button>
     <div id="log"></div>
@@ -45,19 +45,17 @@
 
   let web3, account, contract;
   const log = document.getElementById('log');
-
   const hex = arr => Array.from(arr, b => b.toString(16).padStart(2,'0')).join('');
 
+  // 连接
   document.getElementById('connect').onclick = async () => {
-    if (!window.ethereum) return alert("请安装 MetaMask");
-    try {
-      await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]});
-    } catch {
-      await ethereum.request({method:'wallet_addEthereumChain', params:[{
+    if (!window.ethereum) return alert("请装 MetaMask");
+    try { await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]}); }
+    catch { await ethereum.request({method:'wallet_addEthereumChain', params:[{
         chainId:'0x2768', chainName:'GateLayer', rpcUrls:['https://gatelayer-mainnet.gatenode.cc'],
         nativeCurrency:{name:'GT',symbol:'GT',decimals:18}
-      }]});
-    }
+    }]}); }
+
     const a = await ethereum.request({method:'eth_requestAccounts'});
     account = a[0];
     web3 = new Web3(ethereum);
@@ -69,44 +67,48 @@
     document.getElementById('claim').onclick = claim;
   };
 
+  // 隐身转账
   async function send() {
     const to = document.getElementById('to').value.trim();
     const amt = document.getElementById('amt').value;
-    if (!web3.utils.isAddress(to)) return log.innerText = "地址错误";
-    if (!amt || amt <= 0) return log.innerText = "输入金额";
+    if (!web3.utils.isAddress(to)) return log.innerText = "地址错";
+    if (!amt || amt <= 0) return log.innerText = "填金额";
 
-    log.innerText = "生成隐私钥匙...";
+    log.innerText = "生成钥匙...";
 
-    // 关键修复：用压缩公钥（33字节）
     const ephPriv = noble.utils.randomPrivateKey();
-    const ephPub = noble.getPublicKey(ephPriv, true); // ← true = 压缩！
-    const stealth = "0x" + hex(ephPub.slice(1)).padStart(64, '0'); // 32字节
-    const ephPubHex = "0x" + hex(ephPub); // 33字节
+    const ephPub = noble.getPublicKey(ephPriv, true);               // 33 字节压缩
+    const stealth = "0x" + hex(ephPub.slice(1)).padStart(64, '0');   // 32 字节
+    const ephPubHex = "0x" + hex(ephPub);                           // 33 字节
 
     const wei = web3.utils.toWei(amt, "ether");
-    log.innerText = "发送中...（请确认 gas）";
+    log.innerText = "请确认 gas 费...";
 
     try {
       await contract.methods.stealthTransfer(stealth, ephPubHex, wei).send({from: account});
-      
+
+      // 存本地暗号
       const rec = {sender:account, amt, stealth, ephPub:ephPubHex, ephPriv:"0x"+hex(ephPriv)};
       let list = JSON.parse(localStorage.getItem("gn")||"[]");
       list.push(rec);
       localStorage.setItem("gn", JSON.stringify(list));
 
-      log.innerHTML = `成功！已转 ${amt} GN<br>发链接给对方：<br><a href="${location.href}" style="color:#0ff">点我打开</a>`;
+      log.innerHTML = `成功！已转 ${amt} GN<br>发链接给对方：<br>
+        <a href="${location.href}" style="color:#0ff">点我打开领取页</a>`;
       document.getElementById('amt').value = '';
     } catch(e) {
       log.innerText = "失败：" + e.message;
     }
   }
 
+  // 一键领取
   async function claim() {
     const list = JSON.parse(localStorage.getItem("gn")||"[]");
-    if (!list.length) return log.innerText = "没有可领取的 GN";
+    if (!list.length) return log.innerText = "没有可领的 GN";
 
-    log.innerText = "悄悄领取中...";
+    log.innerText = "请确认 gas 费...";
     let total = 0;
+
     for (const r of list) {
       try {
         const msg = web3.utils.keccak256(web3.utils.encodePacked(
@@ -130,10 +132,11 @@
         ).send({from: account});
 
         total += parseFloat(r.amt);
-      } catch(e) { console.log("已领", e); }
+      } catch(e) { console.log("已领或失败", e); }
     }
+
     localStorage.setItem("gn", "[]");
-    log.innerHTML = `领取成功！共 +${total} GN 悄悄到账`;
+    log.innerHTML = `领取成功！共 +${total} GN 到账`;
   }
 </script>
 </body>
