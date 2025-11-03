@@ -33,7 +33,6 @@
   </div>
 </div>
 
-<!-- 1. 唯一正确的 noble CDN -->
 <script type="module">
   import * as noble from 'https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.0.0/+esm';
   import Web3 from 'https://cdn.jsdelivr.net/npm/web3@4.3.0/+esm';
@@ -47,10 +46,8 @@
   let web3, account, contract;
   const log = document.getElementById('log');
 
-  // 转 Uint8Array → hex
   const hex = arr => Array.from(arr, b => b.toString(16).padStart(2,'0')).join('');
 
-  // 连接
   document.getElementById('connect').onclick = async () => {
     if (!window.ethereum) return alert("请安装 MetaMask");
     try {
@@ -72,7 +69,6 @@
     document.getElementById('claim').onclick = claim;
   };
 
-  // 隐身转账
   async function send() {
     const to = document.getElementById('to').value.trim();
     const amt = document.getElementById('amt').value;
@@ -81,30 +77,30 @@
 
     log.innerText = "生成隐私钥匙...";
 
+    // 关键修复：用压缩公钥（33字节）
     const ephPriv = noble.utils.randomPrivateKey();
-    const ephPub = noble.getPublicKey(ephPriv, false); // 65 字节
-    const stealth = "0x" + hex(ephPub.slice(1)).padStart(64, '0');
-    const ephPubHex = "0x" + hex(ephPub);
+    const ephPub = noble.getPublicKey(ephPriv, true); // ← true = 压缩！
+    const stealth = "0x" + hex(ephPub.slice(1)).padStart(64, '0'); // 32字节
+    const ephPubHex = "0x" + hex(ephPub); // 33字节
 
     const wei = web3.utils.toWei(amt, "ether");
-    log.innerText = "发送中...";
+    log.innerText = "发送中...（请确认 gas）";
 
     try {
       await contract.methods.stealthTransfer(stealth, ephPubHex, wei).send({from: account});
-
+      
       const rec = {sender:account, amt, stealth, ephPub:ephPubHex, ephPriv:"0x"+hex(ephPriv)};
       let list = JSON.parse(localStorage.getItem("gn")||"[]");
       list.push(rec);
       localStorage.setItem("gn", JSON.stringify(list));
 
-      log.innerHTML = `成功！已转 ${amt} GN<br>发这个链接给对方：<br><a href="${location.href}" style="color:#0ff">${location.href}</a>`;
+      log.innerHTML = `成功！已转 ${amt} GN<br>发链接给对方：<br><a href="${location.href}" style="color:#0ff">点我打开</a>`;
       document.getElementById('amt').value = '';
     } catch(e) {
       log.innerText = "失败：" + e.message;
     }
   }
 
-  // 一键领取
   async function claim() {
     const list = JSON.parse(localStorage.getItem("gn")||"[]");
     if (!list.length) return log.innerText = "没有可领取的 GN";
