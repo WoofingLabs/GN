@@ -10,25 +10,38 @@
     .c{max-width:420px;width:100%;background:#111;border:2px solid #00d1ff;border-radius:28px;padding:2.5rem;box-shadow:0 0 60px #00d1ff40}
     .logo{width:100px;height:100px;border-radius:50%;box-shadow:0 0 50px #8b00ff;margin:0 auto 1rem;display:block}
     h1{font-size:2.4rem;text-align:center;background:linear-gradient(135deg,#00d1ff,#8b00ff);-webkit-background-clip:text;color:transparent}
-    input,button{width:100%;height:60px;border-radius:18px;margin:12px 0;padding:0 1.4rem;font-size:1.1rem}
-    input{background:#000;border:1px solid #333;color:#fff;outline:none}
-    button{background:linear-gradient(135deg,#00d1ff,#8b00ff);border:none;color:#000;font-weight:900;cursor:pointer}
-    #log{text-align:center;margin-top:1rem;min-height:32px;color:#0f0;font-size:1rem;line-height:1.5}
+    input,button,textarea{width:100%;border-radius:18px;margin:12px 0;padding:1rem;font-size:1.1rem}
+    input,textarea{background:#000;border:1px solid #333;color:#fff;outline:none;resize:none}
+    button{background:linear-gradient(135deg,#00d1ff,#8b00ff);border:none;color:#000;font-weight:900;cursor:pointer;height:60px}
+    #log{text-align:center;margin-top:1rem;color:#0f0;font-size:1rem;line-height:1.5}
+    .box{background:#222;padding:1rem;border-radius:12px;margin:1rem 0}
+    .hide{display:none}
   </style>
 </head>
 <body>
 <div class="c">
   <img src="https://raw.githubusercontent.com/WoofingLabs/Grabbit/refs/heads/main/images/GN.png" class="logo">
   <h1>GN 隐私转账</h1>
-  <p style="text-align:center;color:#888;margin:1rem 0">发钱/领钱 都弹 gas · 链上零地址</p>
+  <p style="text-align:center;color:#888">发钱出暗号 · 收钱粘暗号</p>
 
   <button id="connect">连接钱包</button>
 
-  <div id="form" style="display:none">
+  <div id="form" class="hide">
     <input id="to" placeholder="对方地址">
     <input id="amt" placeholder="GN 数量" type="number" step="any">
     <button id="send">隐身转账</button>
-    <button id="claim">一键领取</button>
+    
+    <div id="code" class="box hide">
+      <p><b>暗号（发给对方）：</b></p>
+      <textarea id="dark" rows="3" readonly></textarea>
+      <button onclick="copy()">复制暗号</button>
+    </div>
+
+    <hr style="border:1px solid #333;margin:2rem 0">
+
+    <textarea id="paste" rows="3" placeholder="收钱人：粘贴暗号到这里"></textarea>
+    <button id="claim">粘贴暗号 → 领取</button>
+
     <div id="log"></div>
   </div>
 </div>
@@ -45,11 +58,10 @@
 
   let web3, account, contract;
   const log = document.getElementById('log');
-  const hex = arr => Array.from(arr, b => b.toString(16).padStart(2,'0')).join('');
+  const hex = a => Array.from(a, b => b.toString(16).padStart(2,'0')).join('');
 
-  // 连接
   document.getElementById('connect').onclick = async () => {
-    if (!window.ethereum) return alert("请装 MetaMask");
+    if (!window.ethereum) return alert("请安装 MetaMask");
     try { await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]}); }
     catch { await ethereum.request({method:'wallet_addEthereumChain', params:[{
         chainId:'0x2768', chainName:'GateLayer', rpcUrls:['https://gatelayer-mainnet.gatenode.cc'],
@@ -62,81 +74,75 @@
     contract = new web3.eth.Contract(ABI, CONTRACT);
 
     document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,8) + '...';
-    document.getElementById('form').style.display = 'block';
+    document.getElementById('form').classList.remove('hide');
     document.getElementById('send').onclick = send;
-    document.getElementById('claim').onclick = claim;
+    document.getElementById('claim').onclick = () => claimFromInput();
   };
 
-  // 隐身转账
   async function send() {
     const to = document.getElementById('to').value.trim();
     const amt = document.getElementById('amt').value;
-    if (!web3.utils.isAddress(to)) return log.innerText = "地址错";
-    if (!amt || amt <= 0) return log.innerText = "填金额";
+    if (!web3.utils.isAddress(to)) return log.innerText = "地址错误";
+    if (!amt || amt <= 0) return log.innerText = "输入金额";
 
-    log.innerText = "生成钥匙...";
-
+    log.innerText = "生成暗号...";
     const ephPriv = noble.utils.randomPrivateKey();
-    const ephPub = noble.getPublicKey(ephPriv, true);               // 33 字节压缩
-    const stealth = "0x" + hex(ephPub.slice(1)).padStart(64, '0');   // 32 字节
-    const ephPubHex = "0x" + hex(ephPub);                           // 33 字节
+    const ephPub = noble.getPublicKey(ephPriv, true);
+    const stealth = "0x" + hex(ephPub.slice(1)).padStart(64,'0');
+    const ephPubHex = "0x" + hex(ephPub);
 
-    const wei = web3.utils.toWei(amt, "ether");
-    log.innerText = "请确认 gas 费...";
-
+    log.innerText = "请确认 gas...";
     try {
-      await contract.methods.stealthTransfer(stealth, ephPubHex, wei).send({from: account});
+      await contract.methods.stealthTransfer(stealth, ephPubHex, web3.utils.toWei(amt,"ether")).send({from: account});
 
-      // 存本地暗号
-      const rec = {sender:account, amt, stealth, ephPub:ephPubHex, ephPriv:"0x"+hex(ephPriv)};
-      let list = JSON.parse(localStorage.getItem("gn")||"[]");
-      list.push(rec);
-      localStorage.setItem("gn", JSON.stringify(list));
+      // 生成并显示暗号
+      const dark = btoa(JSON.stringify({sender:account, amt, stealth, ephPub:ephPubHex, ephPriv:"0x"+hex(ephPriv)}));
+      document.getElementById('dark').value = dark;
+      document.getElementById('code').classList.remove('hide');
 
-      log.innerHTML = `成功！已转 ${amt} GN<br>发链接给对方：<br>
-        <a href="${location.href}" style="color:#0ff">点我打开领取页</a>`;
-      document.getElementById('amt').value = '';
-    } catch(e) {
-      log.innerText = "失败：" + e.message;
-    }
+      log.innerHTML = `成功！已转 ${amt} GN<br>把上方暗号发给对方`;
+    } catch(e) { log.innerText = "失败：" + e.message; }
   }
 
-  // 一键领取
-  async function claim() {
-    const list = JSON.parse(localStorage.getItem("gn")||"[]");
-    if (!list.length) return log.innerText = "没有可领的 GN";
+  function copy() {
+    document.getElementById('dark').select();
+    navigator.clipboard.writeText(document.getElementById('dark').value);
+    alert("暗号已复制！");
+  }
 
-    log.innerText = "请确认 gas 费...";
-    let total = 0;
+  function claimFromInput() {
+    const input = document.getElementById('paste').value.trim();
+    if (!input) return log.innerText = "请粘贴暗号";
+    try {
+      const data = JSON.parse(atob(input));
+      claimOne(data);
+    } catch { log.innerText = "暗号错误"; }
+  }
 
-    for (const r of list) {
-      try {
-        const msg = web3.utils.keccak256(web3.utils.encodePacked(
-          r.sender, web3.utils.toWei(r.amt,"ether"), r.stealth, r.ephPub
-        ));
-        const hash = web3.utils.keccak256(web3.utils.encodePacked(
-          "\x19Ethereum Signed Message:\n32", msg
-        ));
+  async function claimOne(r) {
+    log.innerText = "请确认 gas...";
+    try {
+      const msg = web3.utils.keccak256(web3.utils.encodePacked(
+        r.sender, web3.utils.toWei(r.amt,"ether"), r.stealth, r.ephPub
+      ));
+      const hash = web3.utils.keccak256(web3.utils.encodePacked("\x19Ethereum Signed Message:\n32", msg));
 
-        const sig = noble.signSync(hash.slice(2), r.ephPriv.slice(2), {der:false, recovered:true});
-        const [s, rec] = sig;
+      const sig = noble.signSync(hash.slice(2), r.ephPriv.slice(2), {der:false, recovered:true});
+      const [s, rec] = sig;
 
-        await contract.methods.claimStealth(
-          r.sender,
-          web3.utils.toWei(r.amt,"ether"),
-          r.stealth,
-          r.ephPub,
-          "0x"+hex(s.slice(0,32)),
-          "0x"+hex(s.slice(32,64)),
-          rec + 27
-        ).send({from: account});
+      await contract.methods.claimStealth(
+        r.sender,
+        web3.utils.toWei(r.amt,"ether"),
+        r.stealth,
+        r.ephPub,
+        "0x"+hex(s.slice(0,32)),
+        "0x"+hex(s.slice(32,64)),
+        rec + 27
+      ).send({from: account});
 
-        total += parseFloat(r.amt);
-      } catch(e) { console.log("已领或失败", e); }
-    }
-
-    localStorage.setItem("gn", "[]");
-    log.innerHTML = `领取成功！共 +${total} GN 到账`;
+      log.innerHTML = `领取成功！+${r.amt} GN 到账`;
+      document.getElementById('paste').value = '';
+    } catch(e) { log.innerText = "领取失败：" + e.message; }
   }
 </script>
 </body>
