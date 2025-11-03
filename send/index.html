@@ -37,14 +37,23 @@
 <script src="https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.0.0/dist/index.js"></script>
 
 <script>
-// 合约地址（你最新的）
-const CONTRACT = "0x13336e9d92eE3F7aBA8A5150A5DeB2FcD77EEB82";
+// 关键修复 1：等待 noble 准备好
+async function waitNoble() {
+  if (!noble.ready) await new Promise(r => setTimeout(r, 100));
+  while (!noble.ready) await new Promise(r => setTimeout(r, 50));
+}
 
+// 关键修复 2：用 Uint8Array 代替 Buffer
+function hex(buf) {
+  return Array.from(buf).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+const CONTRACT = "0x13336e9d92eE3F7aBA8A5150A5DeB2FcD77EEB82";
 let web3, account, contract;
 const log = document.getElementById('log');
 
-// 1. 切 GateLayer
-async function addChain() {
+document.getElementById('connect').onclick = async () => {
+  if (!window.ethereum) return alert("请安装 MetaMask");
   try {
     await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]});
   } catch {
@@ -53,12 +62,7 @@ async function addChain() {
       nativeCurrency:{name:'GT',symbol:'GT',decimals:18}
     }]});
   }
-}
 
-// 2. 连接
-document.getElementById('connect').onclick = async () => {
-  if (!window.ethereum) return alert("请安装 MetaMask");
-  await addChain();
   const a = await ethereum.request({method:'eth_requestAccounts'});
   account = a[0];
   web3 = new Web3(ethereum);
@@ -73,7 +77,6 @@ document.getElementById('connect').onclick = async () => {
   document.getElementById('claim').onclick = claim;
 };
 
-// 3. 隐身转账
 async function send() {
   const to = document.getElementById('to').value.trim();
   const amt = document.getElementById('amt').value;
@@ -81,12 +84,12 @@ async function send() {
   if (!amt || amt <= 0) return log.innerText = "填金额";
 
   log.innerText = "生成钥匙...";
+  await waitNoble();   // 必须等！
 
-  // 关键：直接生成，不等任何 .ready
   const ephPriv = noble.utils.randomPrivateKey();
-  const ephPub = noble.getPublicKey(ephPriv, false); // 65 字节
-  const stealth = "0x" + Buffer.from(ephPub.slice(1)).toString('hex').padStart(64,'0');
-  const ephPubHex = "0x" + Buffer.from(ephPub).toString('hex');
+  const ephPub = noble.getPublicKey(ephPriv, false); // 65 bytes
+  const stealth = "0x" + hex(ephPub.slice(1)).padStart(64, '0');
+  const ephPubHex = "0x" + hex(ephPub);
 
   const wei = web3.utils.toWei(amt, "ether");
   log.innerText = "发送中...";
@@ -94,25 +97,25 @@ async function send() {
   try {
     await contract.methods.stealthTransfer(stealth, ephPubHex, wei).send({from: account});
 
-    // 存本地
-    const rec = {sender:account, amt, stealth, ephPub:ephPubHex, ephPriv:"0x"+Buffer.from(ephPriv).toString('hex')};
+    const rec = {sender:account, amt, stealth, ephPub:ephPubHex, ephPriv:"0x"+hex(ephPriv)};
     let list = JSON.parse(localStorage.getItem("gn")||"[]");
     list.push(rec);
     localStorage.setItem("gn", JSON.stringify(list));
 
-    log.innerHTML = `成功！<br>已转 ${amt} GN<br>快叫对方点“一键领取”`;
+    log.innerHTML = `成功！已转 ${amt} GN<br>快叫对方点“一键领取”`;
     document.getElementById('amt').value = '';
   } catch(e) {
     log.innerText = "失败：" + e.message;
   }
 }
 
-// 4. 一键领取
 async function claim() {
   const list = JSON.parse(localStorage.getItem("gn")||"[]");
   if (!list.length) return log.innerText = "没有可领的";
 
   log.innerText = "领取中...";
+  await waitNoble();   // 必须等！
+
   let total = 0;
   for (const r of list) {
     try {
@@ -134,13 +137,13 @@ async function claim() {
         web3.utils.toWei(r.amt,"ether"),
         r.stealth,
         r.ephPub,
-        "0x"+s.slice(0,32).toString('hex'),
-        "0x"+s.slice(32,64).toString('hex'),
+        "0x"+hex(s.slice(0,32)),
+        "0x"+hex(s.slice(32,64)),
         rec + 27
       ).send({from: account});
 
       total += parseFloat(r.amt);
-    } catch {}
+    } catch(e) { console.log(e); }
   }
   localStorage.setItem("gn", "[]");
   log.innerHTML = `领完！共 +${total} GN 到账`;
