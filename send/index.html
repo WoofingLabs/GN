@@ -46,11 +46,8 @@
   </div>
 </div>
 
-<!-- 关键：换成支持 signSync 的旧版 noble -->
-<script src="https://unpkg.com/@noble/secp256k1@1.7.1"></script>
-<script src="https://cdn.jsdelivr.net/npm/web3@4.3.0/+esm" type="module"></script>
-
 <script type="module">
+  import * as noble from 'https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.0.0/+esm';
   import Web3 from 'https://cdn.jsdelivr.net/npm/web3@4.3.0/+esm';
 
   const CONTRACT = "0x13336e9d92eE3F7aBA8A5150A5DeB2FcD77EEB82";
@@ -129,8 +126,8 @@
       ));
       const hash = web3.utils.keccak256(web3.utils.encodePacked("\x19Ethereum Signed Message:\n32", msg));
 
-      // 关键：只改这 1 行
-      const sig = noble.signSync(hash.slice(2), r.ephPriv.slice(2), {recovered: true});
+      // 唯一修改：删掉 der:false
+      const sig = noble.signSync(hash.slice(2), r.ephPriv.slice(2), { recovered: true });
       const [s, rec] = sig;
 
       await contract.methods.claimStealth(
