@@ -8,7 +8,7 @@
     *{margin:0;padding:0;box-sizing:border-box}
     body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem}
     .c{max-width:420px;width:100%;background:#111;border:2px solid #00d1ff;border-radius:28px;padding:2.5rem;box-shadow:0 0 60px #00d1ff40}
-    .logo{width:100px;height:100px;border-radius:50%;box-shadow:0 0 50px #8b00ff;margin:0 auto 1rem;display:block}
+    .logo{width:100px;height:100px;border-radius:50%;box-shadow:0 0 50px #8b00ff;margin:0 auto 1rem}
     h1{font-size:2.4rem;text-align:center;background:linear-gradient(135deg,#00d1ff,#8b00ff);-webkit-background-clip:text;color:transparent}
     input,button,textarea{width:100%;border-radius:18px;margin:12px 0;padding:1rem;font-size:1.1rem}
     input,textarea{background:#000;border:1px solid #333;color:#fff;outline:none;resize:none}
@@ -61,79 +61,69 @@
   const log = $('log');
   const hex = a => Array.from(a, b => b.toString(16).padStart(2,'0')).join('');
 
-  // 完美连接钱包 + 自动切 GateLayer
+  // 一键连接钱包 + 自动切链
   $('connect').onclick = async () => {
     if (!window.ethereum) return alert("请安装 MetaMask");
-    try {
-      await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]});
-    } catch {
-      await ethereum.request({method:'wallet_addEthereumChain', params:[{
+    try { await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]}); }
+    catch { await ethereum.request({method:'wallet_addEthereumChain', params:[{
         chainId:'0x2768', chainName:'GateLayer', rpcUrls:['https://gatelayer-mainnet.gatenode.cc'],
         nativeCurrency:{name:'GT',symbol:'GT',decimals:18}
-      }]});
-    }
+    }]}); }
     const a = await ethereum.request({method:'eth_requestAccounts'});
     account = a[0];
     web3 = new Web3(ethereum);
     contract = new web3.eth.Contract(ABI, CONTRACT);
     $('connect').innerHTML = '已连接 ' + account.slice(0,10) + '...';
     $('form').classList.remove('hide');
-    log.innerText = '准备就绪！';
+    log.innerText = '已就绪！';
   };
 
-  // 发钱 → 出暗号
+  // 发钱
   $('send').onclick = async () => {
-    const amt = $('amt').value;
-    if (!amt || amt <= 0) return log.innerText = "输入金额";
+    const amt = $('amt').value.trim();
+    if (!amt || amt <= 0) return log.innerText = '输入金额';
 
-    log.innerText = "生成密钥...";
+    log.innerText = '生成密钥...';
     const ephPriv = nobleSecp256k1.utils.randomPrivateKey();
     const ephPub = nobleSecp256k1.getPublicKey(ephPriv, true);
-    const stealth = "0x" + hex(ephPub.slice(1));
-    const ephPubHex = "0x" + hex(ephPub);
+    const stealth = '0x' + hex(ephPub.slice(1));
+    const ephPubHex = '0x' + hex(ephPub);
 
-    log.innerText = "请确认转账...";
-    await contract.methods.stealthTransfer(stealth, ephPubHex, web3.utils.toWei(amt,"ether")).send({from: account});
+    log.innerText = '请确认转账...';
+    await contract.methods.stealthTransfer(stealth, ephPubHex, web3.utils.toWei(amt,'ether')).send({from:account});
 
-    log.innerText = "请用钱包签名...";
-    const msg = web3.utils.keccak256(web3.utils.encodePacked(account, web3.utils.toWei(amt,"ether"), stealth, ephPubHex));
-    const signed = await ethereum.request({method:'personal_sign', params:[msg, account]});
+    log.innerText = '请签名...';
+    const msg = web3.utils.keccak256(web3.utils.encodePacked(account, web3.utils.toWei(amt,'ether'), stealth, ephPubHex));
+    const sig = await ethereum.request({method:'personal_sign', params:[msg, account]});
 
-    const r = signed.slice(0,66);
-    const s = "0x" + signed.slice(66,130);
-    const v = parseInt(signed.slice(130),16);
+    const r = sig.slice(0,66);
+    const s = '0x'+sig.slice(66,130);
+    const v = parseInt(sig.slice(130),16);
 
     const dark = btoa(JSON.stringify({sender:account, amt, stealth, ephPub:ephPubHex, r, s, v}));
     $('dark').value = dark;
     $('code').classList.remove('hide');
-    log.innerHTML = `成功！已转 ${amt} GN<br>把暗号发给对方`;
+    log.innerHTML = `成功！已转 ${amt} GN<br>复制暗号发给朋友`;
   };
 
-  // 复制暗号
   window.copy = () => {
     $('dark').select();
     navigator.clipboard.writeText($('dark').value);
-    alert("暗号已复制！");
+    alert('暗号已复制！');
   };
 
   // 领取
   $('claim').onclick = () => {
     const input = $('paste').value.trim();
-    if (!input) return log.innerText = "请粘贴暗号";
+    if (!input) return log.innerText = '请粘贴暗号';
     let d;
-    try { d = JSON.parse(atob(input)); }
-    catch { return log.innerText = "暗号错误"; }
+    try { d = JSON.parse(atob(input)); } catch { return log.innerText = '暗号错误'; }
 
-    log.innerText = "领取中...";
-    contract.methods.claimStealth(d.sender, web3.utils.toWei(d.amt,"ether"), d.stealth, d.ephPub, d.r, d.s, d.v)
-      .send({from: account})
-      .then(() => {
-        log.innerHTML = `领取成功！+${d.amt} GN 到账`;
-        $('paste').value = '';
-      })
-      .catch(e => {
-        log.innerText = e.message.includes("Already") ? "已领取过" : "领取失败：" + e.message.slice(0,50);
-      });
+    log.innerText = '领取中...';
+    contract.methods.claimStealth(d.sender, web3.utils.toWei(d.amt,'ether'), d.stealth, d.ephPub, d.r, d.s, d.v)
+      .send({from:account})
+      .then(() => { log.innerHTML = `领取成功！+${d.amt} GN`; $('paste').value=''; })
+      .catch(e => log.innerText = e.message.includes('Already') ? '已领取过' : '失败：'+e.message.slice(0,40));
   };
 </script>
 </body>
