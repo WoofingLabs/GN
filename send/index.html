@@ -1,22 +1,21 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GN 隐私转账</title>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem}
-    .c{max-width:420px;width:100%;background:#111;border:2px solid #00d1ff;border-radius:28px;padding:2.5rem;box-shadow:0 0 60px #00d1ff40}
-    .logo{width:100px;height:100px;border-radius:50%;box-shadow:0 0 50px #8b00ff;margin:0 auto 1rem;display:block}
-    h1{font-size:2.4rem;text-align:center;background:linear-gradient(135deg,#00d1ff,#8b00ff);-webkit-background-clip:text;color:transparent}
-    input,button,textarea{width:100%;border-radius:18px;margin:12px 0;padding:1rem;font-size:1.1rem}
-    input,textarea{background:#000;border:1px solid #333;color:#fff;outline:none;resize:none}
-    button{background:linear-gradient(135deg,#00d1ff,#8b00ff);border:none;color:#000;font-weight:900;cursor:pointer;height:60px}
-    #log{text-align:center;margin-top:1rem;color:#0f0;font-size:1rem;line-height:1.5}
-    .box{background:#222;padding:1rem;border-radius:12px;margin:1rem 0}
-    .hide{display:none}
-  </style>
+<meta charset="UTF-8">
+<title>GN 隐私转账</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem}
+.c{max-width:420px;width:100%;background:#111;border:2px solid #00d1ff;border-radius:28px;padding:2.5rem;box-shadow:0 0 60px #00d1ff40}
+.logo{width:100px;height:100px;border-radius:50%;box-shadow:0 0 50px #8b00ff;margin:0 auto 1rem;display:block}
+h1{font-size:2.4rem;text-align:center;background:linear-gradient(135deg,#00d1ff,#8b00ff);-webkit-background-clip:text;color:transparent}
+input,button,textarea{width:100%;border-radius:18px;margin:12px 0;padding:1rem;font-size:1.1rem}
+input,textarea{background:#000;border:1px solid #333;color:#fff;outline:none;resize:none}
+button{background:linear-gradient(135deg,#00d1ff,#8b00ff);border:none;color:#000;font-weight:900;cursor:pointer;height:60px}
+#log{text-align:center;margin-top:1rem;color:#0f0;font-size:1rem;line-height:1.5}
+.box{background:#222;padding:1rem;border-radius:12px;margin:1rem 0}
+.hide{display:none}
+</style>
 </head>
 <body>
 <div class="c">
@@ -27,7 +26,6 @@
   <button id="connect">连接钱包</button>
 
   <div id="form" class="hide">
-    <input id="to" placeholder="对方地址">
     <input id="amt" placeholder="GN 数量" type="number" step="any">
     <button id="send">隐身转账</button>
     
@@ -46,132 +44,96 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/@noble/secp256k1@2.0.0"></script>
+<script src="https://unpkg.com/@noble/secp256k1@1.7.1"></script>
 <script type="module">
-  import Web3 from 'https://cdn.jsdelivr.net/npm/web3@4.3.0/+esm';
-  await nobleSecp256k1.ready;
+import Web3 from 'https://cdn.jsdelivr.net/npm/web3@4.3.0/+esm';
 
-  const CONTRACT = "0x13336e9d92eE3F7aBA8A5150A5DeB2FcD77EEB82";
-  const ABI = [
-    {"inputs":[{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"stealthTransfer","outputs":[],"stateMutability":"nonpayable","type":"function"},
-    {"inputs":[{"internalType":"address","name":"_sender","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"},{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"},{"internalType":"uint8","name":"v","type":"uint8"}],"name":"claimStealth","outputs":[],"stateMutability":"nonpayable","type":"function"}
-  ];
+const CONTRACT = "0x13336e9d92eE3F7aBA8A5150A5DeB2FcD77EEB82";
+const ABI = [
+  {"inputs":[{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"stealthTransfer","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"_sender","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"},{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"},{"internalType":"uint8","name":"v","type":"uint8"}],"name":"claimStealth","outputs":[],"stateMutability":"nonpayable","type":"function"}
+];
 
-  let web3, account, contract;
-  const log = document.getElementById('log');
+let web3, account, contract;
+const log = document.getElementById('log');
 
-  // 你原来的连接代码（完美保留）
-  document.getElementById('connect').onclick = async () => {
-    if (!window.ethereum) return alert("请安装 MetaMask");
-    try { await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]}); }
-    catch { await ethereum.request({method:'wallet_addEthereumChain', params:[{
-        chainId:'0x2768', chainName:'GateLayer', rpcUrls:['https://gatelayer-mainnet.gatenode.cc'],
-        nativeCurrency:{name:'GT',symbol:'GT',decimals:18}
-    }]}); }
+document.getElementById('connect').onclick = async () => {
+  if (!window.ethereum) return alert("请安装 MetaMask");
+  try { await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]}); }
+  catch { await ethereum.request({method:'wallet_addEthereumChain', params:[{
+      chainId:'0x2768',
+      chainName:'GateLayer',
+      rpcUrls:['https://gatelayer-mainnet.gatenode.cc'],
+      nativeCurrency:{name:'GT',symbol:'GT',decimals:18}
+  }]}); }
 
-    const a = await ethereum.request({method:'eth_requestAccounts'});
-    account = a[0];
-    web3 = new Web3(ethereum);
-    contract = new web3.eth.Contract(ABI, CONTRACT);
+  const a = await ethereum.request({method:'eth_requestAccounts'});
+  account = a[0];
+  web3 = new Web3(window.ethereum);
+  contract = new web3.eth.Contract(ABI, CONTRACT);
 
-    document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,8) + '...';
-    document.getElementById('form').classList.remove('hide');
-    document.getElementById('send').onclick = send;
-    document.getElementById('claim').onclick = () => claimFromInput();
-  };
+  document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,8) + '...';
+  document.getElementById('form').classList.remove('hide');
+};
 
-  // 【修复1】生成 bytes32 随机标签
-  function randomBytes32() {
-    const arr = new Uint8Array(32);
-    crypto.getRandomValues(arr);
-    return '0x' + Array.from(arr, b => b.toString(16).padStart(2,'0')).join('');
-  }
+document.getElementById('send').onclick = async () => {
+  const amt = document.getElementById('amt').value;
+  if (!amt) return log.innerText = "输入金额";
+  log.innerText = "生成暗号...";
 
-  // 【修复2】发送：只发随机标签 + 压缩公钥
-  async function send() {
-    const amt = document.getElementById('amt').value;
-    if (!amt || amt <= 0) return log.innerText = "输入金额";
+  const ephPriv = noble.utils.randomPrivateKey();
+  const ephPub = noble.getPublicKey(ephPriv, true);
+  const stealth = web3.utils.randomHex(32);
+  const ephPubHex = "0x" + Array.from(ephPub, b=>b.toString(16).padStart(2,'0')).join('');
 
-    log.innerText = "生成暗号...";
-    const ephPriv = nobleSecp256k1.utils.randomPrivateKey();
-    const ephPub = nobleSecp256k1.getPublicKey(ephPriv, true); // 33字节压缩
-    const stealth = randomBytes32(); // 纯随机标签
+  try {
+    await contract.methods.stealthTransfer(stealth, ephPubHex, web3.utils.toWei(amt,"ether")).send({from:account});
+    const dark = btoa(JSON.stringify({sender:account, amt, stealth, ephPub:ephPubHex}));
+    document.getElementById('dark').value = dark;
+    document.getElementById('code').classList.remove('hide');
+    log.innerHTML = `成功！已转 ${amt} GN<br>把暗号发给对方`;
+  } catch(e) { log.innerText = "失败：" + e.message; }
+};
 
-    try {
-      await contract.methods.stealthTransfer(
-        stealth,
-        '0x' + Array.from(ephPub).map(b=>b.toString(16).padStart(2,'0')).join(''),
-        web3.utils.toWei(amt, "ether")
-      ).send({from: account});
+window.copy = () => {
+  document.getElementById('dark').select();
+  navigator.clipboard.writeText(document.getElementById('dark').value);
+  alert("暗号已复制");
+};
 
-      // 暗号只包含 4 个字段
-      const dark = btoa(JSON.stringify({
-        sender: account,
-        amt: amt,
-        stealth: stealth,
-        ephPub: '0x' + Array.from(ephPub).map(b=>b.toString(16).padStart(2,'0')).join('')
-      }));
-      document.getElementById('dark').value = dark;
-      document.getElementById('code').classList.remove('hide');
-      log.innerHTML = `成功！已转 ${amt} GN<br>把暗号发给对方`;
-    } catch(e) { log.innerText = "失败：" + e.message; }
-  }
+document.getElementById('claim').onclick = async () => {
+  const input = document.getElementById('paste').value.trim();
+  if (!input) return log.innerText = "请粘贴暗号";
+  let r;
+  try { r = JSON.parse(atob(input)); } catch { return log.innerText = "暗号错误"; }
 
-  function copy() {
-    document.getElementById('dark').select();
-    navigator.clipboard.writeText(document.getElementById('dark').value);
-    alert("暗号已复制！");
-  }
+  log.innerText = "请签名...";
+  const msg = web3.utils.soliditySha3(
+    {t:'address',v:r.sender},
+    {t:'uint256',v:web3.utils.toWei(r.amt,"ether")},
+    {t:'bytes32',v:r.stealth},
+    {t:'bytes',v:r.ephPub}
+  );
+  const hash = web3.utils.soliditySha3(
+    {t:'string',v:'\x19Ethereum Signed Message:\n32'},
+    {t:'bytes32',v:msg}
+  );
 
-  // 【修复3】领取：用 personal_sign 签完整消息
-  async function claimFromInput() {
-    const input = document.getElementById('paste').value.trim();
-    if (!input) return log.innerText = "请粘贴暗号";
-    let data;
-    try { data = JSON.parse(atob(input)); }
-    catch { return log.innerText = "暗号错误"; }
+  const sig = await ethereum.request({method:'personal_sign', params:[hash, account]});
 
-    const {sender, amt, stealth, ephPub} = data;
-    const amountWei = web3.utils.toWei(amt.toString(), "ether");
+  await contract.methods.claimStealth(
+    r.sender,
+    web3.utils.toWei(r.amt,"ether"),
+    r.stealth,
+    r.ephPub,
+    sig.slice(0,66),
+    '0x'+sig.slice(66,130),
+    parseInt(sig.slice(130,132),16)
+  ).send({from:account});
 
-    // 合约里拼的顺序：sender + amount + stealth + ephPub
-    const message = web3.utils.keccak256(
-      web3.utils.encodePacked(
-        {t: 'address', v: sender},
-        {t: 'uint256', v: amountWei},
-        {t: 'bytes32', v: stealth},
-        {t: 'bytes', v: ephPub}
-      )
-    );
-
-    const hash = web3.utils.keccak256(
-      "\x19Ethereum Signed Message:\n32" + message.slice(2)
-    );
-
-    log.innerText = "请签名...";
-    const sig = await ethereum.request({
-      method: 'personal_sign',
-      params: [hash, account]
-    });
-
-    // 拆 sig
-    const r = sig.slice(0, 66);
-    const s = '0x' + sig.slice(66, 130);
-    const v = parseInt(sig.slice(130, 132), 16);
-
-    try {
-      await contract.methods.claimStealth(
-        sender,
-        amountWei,
-        stealth,
-        ephPub,
-        r, s, v
-      ).send({from: account});
-
-      log.innerHTML = `领取成功！+${amt} GN 到账`;
-      document.getElementById('paste').value = '';
-    } catch(e) { log.innerText = "领取失败：" + e.message; }
-  }
+  log.innerHTML = `领取成功！+${r.amt} GN 到账`;
+  document.getElementById('paste').value = '';
+};
 </script>
 </body>
 </html>
