@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>GN 隐私转账 - 领取人自己付 Gas</title>
+<title>GN 隐私转账 - 永不漏版</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem}
@@ -23,7 +23,7 @@ button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;
   <button id="connect">连接钱包</button>
 
   <div id="main" class="hide">
-    <input id="amt" placeholder="输入要发的 GN 数量" type="number" step="any">
+    <input id="amt" placeholder="输入 GN 数量（如 10）" type="number" step="any">
     <button id="send">发送 + 生成暗号</button>
 
     <div id="code" style="background:#222;padding:15px;border-radius:12px;margin:15px 0;display:none">
@@ -34,7 +34,7 @@ button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;
 
     <hr style="border:1px solid #333;margin:20px 0">
 
-    <textarea id="paste" rows="3" placeholder="我是收钱人 → 粘贴暗号 → 点领取（我付 Gas）"></textarea>
+    <textarea id="paste" rows="3" placeholder="收钱人 → 粘贴暗号 → 我付 Gas 领取"></textarea>
     <button id="claim">我付 Gas 领取</button>
 
     <div id="log">状态：等待操作</div>
@@ -44,10 +44,40 @@ button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;
 <script type="module">
 import Web3 from 'https://cdn.jsdelivr.net/npm/web3@4.3.0/+esm';
 
+// 第 1 行：你的 RPC（永不漏）
+const RPC_URL = 'https://gatelayer-mainnet.gatenode.cc';
+
+// 第 2 行：你的合约地址
 const CONTRACT = "0x13336e9d92eE3F7aBA8A5150A5DeB2FcD77EEB82";
+
+// 第 3 行：你的完整 ABI（永不漏）
 const ABI = [
-  {"inputs":[{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"stealthTransfer","outputs":[],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"internalType":"address","name":"_sender","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"},{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"},{"internalType":"uint8","name":"v","type":"uint8"}],"name":"claimStealth","outputs":[],"stateMutability":"nonpayable","type":"function"}
+  {
+    "inputs": [
+      {"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},
+      {"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},
+      {"internalType":"uint256","name":"_amount","type":"uint256"}
+    ],
+    "name": "stealthTransfer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType":"address","name":"_sender","type":"address"},
+      {"internalType":"uint256","name":"_amount","type":"uint256"},
+      {"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},
+      {"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},
+      {"internalType":"bytes32","name":"r","type":"bytes32"},
+      {"internalType":"bytes32","name":"s","type":"bytes32"},
+      {"internalType":"uint8","name":"v","type":"uint8"}
+    ],
+    "name": "claimStealth",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
 ];
 
 let web3, account, contract;
@@ -55,36 +85,43 @@ const log = document.getElementById('log');
 
 document.getElementById('connect').onclick = async () => {
   if (!window.ethereum) return alert("请安装 MetaMask");
+
+  // 自动切 GateLayer + 注入你的 RPC
   try { await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]}); }
-  catch { await ethereum.request({method:'wallet_addEthereumChain', params:[{
-      chainId:'0x2768', chainName:'GateLayer', rpcUrls:['https://gatelayer-mainnet.gatenode.cc'],
+  catch {
+    await ethereum.request({method:'wallet_addEthereumChain', params:[{
+      chainId:'0x2768',
+      chainName:'GateLayer',
+      rpcUrls:[RPC_URL],
       nativeCurrency:{name:'GT',symbol:'GT',decimals:18}
-  }]}); }
+    }]});
+  }
 
   await ethereum.request({method:'eth_requestAccounts'});
   account = (await ethereum.request({method:'eth_accounts'}))[0];
-  
-  // 关键！用你的 RPC
-  web3 = new Web3('https://gatelayer-mainnet.gatenode.cc');
+
+  // 强制使用你的 RPC
+  web3 = new Web3(RPC_URL);
   contract = new web3.eth.Contract(ABI, CONTRACT);
 
   document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,10) + '...';
   document.getElementById('main').classList.remove('hide');
-  log.innerText = '连接成功！可发送或领取';
+  log.innerText = '连接成功！RPC 已加载';
 };
 
 document.getElementById('send').onclick = async () => {
   const amt = document.getElementById('amt').value.trim();
   if (!amt || amt <= 0) return log.innerText = '请输入数量';
 
-  log.innerText = '生成暗号中...';
+  log.innerText = '生成暗号...';
   const stealth = web3.utils.randomHex(32);
   const ephPub = "0x" + Array.from(crypto.getRandomValues(new Uint8Array(33)))
-    .map(b => b.toString(16).padStart(2,'0')).join('');
+    .map(b=>b.toString(16).padStart(2,'0')).join('');
 
   try {
-    const tx = await contract.methods.stealthTransfer(stealth, ephPub, web3.utils.toWei(amt,'ether'))
+    await contract.methods.stealthTransfer(stealth, ephPub, web3.utils.toWei(amt,'ether'))
       .send({from: account});
+
     const dark = btoa(JSON.stringify({s:account, a:amt, t:stealth, p:ephPub}));
     document.getElementById('dark').value = dark;
     document.getElementById('code').style.display = 'block';
@@ -103,34 +140,38 @@ window.copy = () => {
 document.getElementById('claim').onclick = async () => {
   const input = document.getElementById('paste').value.trim();
   if (!input) return log.innerText = '请粘贴暗号';
-
   let d;
   try { d = JSON.parse(atob(input)); }
   catch { return log.innerText = '暗号错误'; }
 
-  log.innerHTML = '请确认：<br>1. 签名<br>2. 支付 Gas<br>→ 领取 ' + d.a + ' GN';
+  log.innerHTML = '请签名并支付 Gas...';
 
   try {
-    const msg = web3.utils.soliditySha3(
-      {t:'address',v:d.s},
-      {t:'uint256',v:web3.utils.toWei(d.a,'ether')},
-      {t:'bytes32',v:d.t},
-      {t:'bytes',v:d.p}
+    const message = web3.utils.soliditySha3(
+      {t:'address', v:d.s},
+      {t:'uint256', v:web3.utils.toWei(d.a,'ether')},
+      {t:'bytes32', v:d.t},
+      {t:'bytes',   v:d.p}
     );
     const hash = web3.utils.soliditySha3(
-      {t:'string',v:'\x19Ethereum Signed Message:\n32'},
-      {t:'bytes32',v:msg}
+      {t:'string',  v:'\x19Ethereum Signed Message:\n32'},
+      {t:'bytes32', v:message}
     );
 
     const sig = await ethereum.request({method:'personal_sign', params:[hash, account]});
     const r = sig.slice(0,66);
     const s = '0x' + sig.slice(66,130);
-    const v = parseInt(sig.slice(130,132),16);
+    const v = parseInt(sig.slice(130,132), 16);
 
-    await contract.methods.claimStealth(d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p, r, s, v)
-      .send({from: account});
+    await contract.methods.claimStealth(
+      d.s,
+      web3.utils.toWei(d.a,'ether'),
+      d.t,
+      d.p,
+      r, s, v
+    ).send({from: account});
 
-    log.innerHTML = `领取成功！<br>+${d.a} GN 已到账`;
+    log.innerHTML = `领取成功！+${d.a} GN 已到账`;
     document.getElementById('paste').value = '';
   } catch(e) {
     log.innerText = '失败：' + (e.message.includes('User denied') ? '你取消了' : e.message);
