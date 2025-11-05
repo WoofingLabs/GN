@@ -13,7 +13,7 @@
     input,button,textarea{width:100%;border-radius:18px;margin:12px 0;padding:1rem;font-size:1.1rem}
     input,textarea{background:#000;border:1px solid #333;color:#fff;outline:none;resize:none}
     button{background:linear-gradient(135deg,#00d1ff,#8b00ff);border:none;color:#000;font-weight:900;cursor:pointer;height:60px}
-    #log{text-align:center;margin-top:1rem;color:#0f0;font-size:1.1rem;line-height:1.5}
+    #log{text-align:center;margin-top:1rem;color:#0f0;font-size:1rem;line-height:1.5}
     .box{background:#222;padding:1rem;border-radius:12px;margin:1rem 0}
     .hide{display:none}
   </style>
@@ -46,8 +46,10 @@
   </div>
 </div>
 
-<!-- 彻底解决 noble is not defined -->
+<!-- 关键：只换这 1 行 -->
 <script src="https://unpkg.com/@noble/secp256k1@1.7.1"></script>
+<script src="https://cdn.jsdelivr.net/npm/web3@4.3.0/+esm" type="module"></script>
+
 <script type="module">
   import Web3 from 'https://cdn.jsdelivr.net/npm/web3@4.3.0/+esm';
 
@@ -99,7 +101,8 @@
       const dark = btoa(JSON.stringify({sender:account, amt, stealth, ephPub:ephPubHex, ephPriv:"0x"+hex(ephPriv)}));
       document.getElementById('dark').value = dark;
       document.getElementById('code').classList.remove('hide');
-      log.innerHTML = `成功！已转 ${amt} GN<br>把暗号发给对方`;
+
+      log.innerHTML = `成功！已转 ${amt} GN<br>把上方暗号发给对方`;
     } catch(e) { log.innerText = "失败：" + e.message; }
   }
 
@@ -113,12 +116,11 @@
     const input = document.getElementById('paste').value.trim();
     if (!input) return log.innerText = "请粘贴暗号";
     try {
-      const r = JSON.parse(atob(input));
-      claimOne(r);
+      const data = JSON.parse(atob(input));
+      claimOne(data);
     } catch { log.innerText = "暗号错误"; }
   }
 
-  // 唯一修复：v 值改为 27 或 28
   async function claimOne(r) {
     log.innerText = "请确认 gas...";
     try {
@@ -137,15 +139,12 @@
         r.ephPub,
         "0x"+hex(s.slice(0,32)),
         "0x"+hex(s.slice(32,64)),
-        rec ? 28 : 27   // 正确！27 或 28
+        rec + 27
       ).send({from: account});
 
       log.innerHTML = `领取成功！+${r.amt} GN 到账`;
       document.getElementById('paste').value = '';
-    } catch(e) { 
-      console.error("领取错误：", e);
-      log.innerText = "领取失败：" + (e.message || "请检查暗号"); 
-    }
+    } catch(e) { log.innerText = "领取失败：" + e.message; }
   }
 </script>
 </body>
