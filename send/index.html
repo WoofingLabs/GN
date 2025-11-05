@@ -61,8 +61,9 @@
 
   let web3, account, contract;
   const log = document.getElementById('log');
+  const hex = a => Array.from(a, b => b.toString(16).padStart(2,'0')).join('');
 
-  // 完全保留你原来的连接逻辑
+  // 你原来的连接逻辑，一字不动
   document.getElementById('connect').onclick = async () => {
     if (!window.ethereum) return alert("请安装 MetaMask");
     try { await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]}); }
@@ -82,35 +83,37 @@
     document.getElementById('claim').onclick = () => claimFromInput();
   };
 
-  // 修复：生成暗号 + 正确签名
+  // 核心修复：发钱人用 MetaMask 签名
   async function send() {
     const amt = document.getElementById('amt').value;
     if (!amt || amt <= 0) return log.innerText = "输入金额";
 
-    log.innerText = "生成密钥...";
+    log.innerText = "生成临时密钥...";
     const ephPriv = nobleSecp256k1.utils.randomPrivateKey();
-    const ephPub = nobleSecp256k1.getPublicKey(ephPriv, true); // 33 bytes
-    const stealth = "0x" + Array.from(ephPub.slice(1)).map(b=>b.toString(16).padStart(2,'0')).join('');
-    const ephPubHex = "0x" + Array.from(ephPub).map(b=>b.toString(16).padStart(2,'0')).join('');
+    const ephPub = nobleSecp256k1.getPublicKey(ephPriv, true);
+    const stealth = "0x" + hex(ephPub.slice(1));
+    const ephPubHex = "0x" + hex(ephPub);
 
     log.innerText = "请确认转账...";
-    await contract.methods.stealthTransfer(
-      stealth,
-      ephPubHex,
-      web3.utils.toWei(amt,"ether")
-    ).send({from: account});
+    await contract.methods.stealthTransfer(stealth, ephPubHex, web3.utils.toWei(amt,"ether")).send({from: account});
 
-    // 关键修复：用 ephPriv 签名消息
-    const msg = web3.utils.keccak256(
+    // 关键：用钱包签名（发钱人私钥）
+    log.innerText = "请用钱包签名...";
+    const message = web3.utils.keccak256(
       web3.utils.encodePacked(account, web3.utils.toWei(amt,"ether"), stealth, ephPubHex)
     );
-    const hash = web3.utils.keccak256("\x19Ethereum Signed Message:\n32" + msg.slice(2));
-    const sig = nobleSecp256k1.sign(hash.slice(2), ephPriv, {recovered:true});
-    const [sigBytes, recovery] = sig;
-    const r = "0x" + Array.from(sigBytes.slice(0,32)).map(b=>b.toString(16).padStart(2,'0')).join('');
-    const s = "0x" + Array.from(sigBytes.slice(32,64)).map(b=>b.toString(16).padStart(2,'0')).join('');
-    const v = 27 + recovery;
+    const signedMessage = await ethereum.request({
+      method: 'personal_sign',
+      params: [message, account]
+    });
 
+    // 解析签名
+    const sig = signedMessage.slice(2);
+    const r = "0x" + sig.substring(0, 64);
+    const s = "0x" + sig.substring(64, 128);
+    const v = parseInt(sig.substring(128, 130), 16);
+
+    // 生成暗号（只含签名，不含私钥）
     const dark = btoa(JSON.stringify({
       sender: account,
       amt: amt,
@@ -130,6 +133,7 @@
     alert("暗号已复制！");
   }
 
+  // 领取：直接用暗号里的签名
   function claimFromInput() {
     const input = document.getElementById('paste').value.trim();
     if (!input) return log.innerText = "请粘贴暗号";
@@ -151,7 +155,12 @@
       log.innerHTML = `领取成功！+${data.amt} GN 到账`;
       document.getElementById('paste').value = '';
     })
-    .catch(e => log.innerText = e.message.includes("Already") ? "已领取过" : "领取失败：" + e.message);
+    .catch(e => {
+      const msg = e.message || "";
+      if (msg.includes("Already claimed")) log.innerText = "已领取过";
+      else if (msg.includes("Invalid signature")) log.innerText = "签名错误";
+      else log.innerText = "领取失败：" + msg.slice(0, 50);
+    });
   }
 </script>
 </body>
