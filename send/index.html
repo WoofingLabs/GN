@@ -6,45 +6,41 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem}
-.c{max-width:420px;width:100%;background:#111;border:2px solid #00d1ff;border-radius:28px;padding:2.5rem;box-shadow:0 0 60px #00d1ff40}
-.logo{width:100px;height:100px;border-radius:50%;box-shadow:0 0 50px #8b00ff;margin:0 auto 1rem;display:block}
-h1{font-size:2.4rem;text-align:center;background:linear-gradient(135deg,#00d1ff,#8b00ff);-webkit-background-clip:text;color:transparent}
-input,button,textarea{width:100%;border-radius:18px;margin:12px 0;padding:1rem;font-size:1.1rem}
-input,textarea{background:#000;border:1px solid #333;color:#fff;outline:none;resize:none}
-button{background:linear-gradient(135deg,#00d1ff,#8b00ff);border:none;color:#000;font-weight:900;cursor:pointer;height:60px}
-#log{text-align:center;margin-top:1rem;color:#0f0;font-size:1rem;line-height:1.5}
-.box{background:#222;padding:1rem;border-radius:12px;margin:1rem 0}
+.c{max-width:400px;width:100%;background:#111;border:2px solid #00ffcc;border-radius:25px;padding:30px;box-shadow:0 0 50px #00ffcc50}
+.logo{width:90px;height:90px;border-radius:50%;margin:0 auto 15px;display:block}
+h1{font-size:28px;text-align:center;background:linear-gradient(90deg,#00ffcc,#ff00cc);-webkit-background-clip:text;color:transparent}
+input,button,textarea{width:100%;padding:15px;margin:10px 0;border-radius:15px;font-size:16px}
+input,textarea{background:#000;border:1px solid #333;color:#fff;outline:none}
+button{background:#00ffcc;color:#000;font-weight:900;border:none;cursor:pointer}
+#log{color:#0f0;text-align:center;margin-top:10px;font-size:14px}
 .hide{display:none}
 </style>
 </head>
 <body>
 <div class="c">
-  <img src="https://raw.githubusercontent.com/WoofingLabs/Grabbit/refs/heads/main/images/GN.png" class="logo">
+  <img src="https://raw.githubusercontent.com/WoofingLabs/Grabbit/main/images/GN.png" class="logo">
   <h1>GN 隐私转账</h1>
-  <p style="text-align:center;color:#888">发钱出暗号 · 收钱粘暗号</p>
-
   <button id="connect">连接钱包</button>
 
-  <div id="form" class="hide">
-    <input id="amt" placeholder="GN 数量" type="number" step="any">
-    <button id="send">隐身转账</button>
-    
-    <div id="code" class="box hide">
+  <div id="main" class="hide">
+    <input id="amt" placeholder="输入 GN 数量" type="number" step="any">
+    <button id="send">发送 + 生成暗号</button>
+
+    <div id="code" style="background:#222;padding:15px;border-radius:12px;margin:15px 0;display:none">
       <p><b>暗号（发给对方）：</b></p>
-      <textarea id="dark" rows="3" readonly></textarea>
+      <textarea id="dark" rows="2" readonly></textarea>
       <button onclick="copy()">复制暗号</button>
     </div>
 
-    <hr style="border:1px solid #333;margin:2rem 0">
+    <hr style="border:1px solid #333;margin:20px 0">
 
-    <textarea id="paste" rows="3" placeholder="收钱人：粘贴暗号到这里"></textarea>
-    <button id="claim">粘贴暗号 → 领取</button>
+    <textarea id="paste" rows="2" placeholder="粘贴暗号 → 领取"></textarea>
+    <button id="claim">一键领取</button>
 
     <div id="log"></div>
   </div>
 </div>
 
-<script src="https://unpkg.com/@noble/secp256k1@1.7.1"></script>
 <script type="module">
 import Web3 from 'https://cdn.jsdelivr.net/npm/web3@4.3.0/+esm';
 
@@ -59,40 +55,47 @@ const log = document.getElementById('log');
 
 document.getElementById('connect').onclick = async () => {
   if (!window.ethereum) return alert("请安装 MetaMask");
-  try { await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]}); }
-  catch { await ethereum.request({method:'wallet_addEthereumChain', params:[{
+  try {
+    await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]});
+  } catch {
+    await ethereum.request({method:'wallet_addEthereumChain', params:[{
       chainId:'0x2768',
       chainName:'GateLayer',
       rpcUrls:['https://gatelayer-mainnet.gatenode.cc'],
       nativeCurrency:{name:'GT',symbol:'GT',decimals:18}
-  }]}); }
-
-  const a = await ethereum.request({method:'eth_requestAccounts'});
-  account = a[0];
+    }]});
+  }
+  await ethereum.request({method:'eth_requestAccounts'});
   web3 = new Web3(window.ethereum);
   contract = new web3.eth.Contract(ABI, CONTRACT);
-
-  document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,8) + '...';
-  document.getElementById('form').classList.remove('hide');
+  account = (await web3.eth.getAccounts())[0];
+  document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,10) + '...';
+  document.getElementById('main').classList.remove('hide');
 };
 
 document.getElementById('send').onclick = async () => {
-  const amt = document.getElementById('amt').value;
-  if (!amt) return log.innerText = "输入金额";
-  log.innerText = "生成暗号...";
+  const amt = document.getElementById('amt').value.trim();
+  if (!amt || amt <= 0) return log.innerText = "请输入数量";
+  log.innerText = "生成暗号中...";
 
-  const ephPriv = noble.utils.randomPrivateKey();
-  const ephPub = noble.getPublicKey(ephPriv, true);
   const stealth = web3.utils.randomHex(32);
-  const ephPubHex = "0x" + Array.from(ephPub, b=>b.toString(16).padStart(2,'0')).join('');
+  const ephPub = "0x" + Array.from(crypto.getRandomValues(new Uint8Array(33)))
+    .map(b => b.toString(16).padStart(2,'0')).join('');
 
   try {
-    await contract.methods.stealthTransfer(stealth, ephPubHex, web3.utils.toWei(amt,"ether")).send({from:account});
-    const dark = btoa(JSON.stringify({sender:account, amt, stealth, ephPub:ephPubHex}));
+    await contract.methods.stealthTransfer(
+      stealth,
+      ephPub,
+      web3.utils.toWei(amt, 'ether')
+    ).send({from: account});
+
+    const dark = btoa(JSON.stringify({s:account, a:amt, t:stealth, p:ephPub}));
     document.getElementById('dark').value = dark;
-    document.getElementById('code').classList.remove('hide');
-    log.innerHTML = `成功！已转 ${amt} GN<br>把暗号发给对方`;
-  } catch(e) { log.innerText = "失败：" + e.message; }
+    document.getElementById('code').style.display = 'block';
+    log.innerHTML = `成功！已转 ${amt} GN<br>请把暗号发给对方`;
+  } catch(e) {
+    log.innerText = "失败：" + (e.message || e);
+  }
 };
 
 window.copy = () => {
@@ -104,35 +107,40 @@ window.copy = () => {
 document.getElementById('claim').onclick = async () => {
   const input = document.getElementById('paste').value.trim();
   if (!input) return log.innerText = "请粘贴暗号";
-  let r;
-  try { r = JSON.parse(atob(input)); } catch { return log.innerText = "暗号错误"; }
+  let d;
+  try { d = JSON.parse(atob(input)); } catch { return log.innerText = "暗号错误"; }
 
   log.innerText = "请签名...";
   const msg = web3.utils.soliditySha3(
-    {t:'address',v:r.sender},
-    {t:'uint256',v:web3.utils.toWei(r.amt,"ether")},
-    {t:'bytes32',v:r.stealth},
-    {t:'bytes',v:r.ephPub}
+    {t:'address', v:d.s},
+    {t:'uint256', v:web3.utils.toWei(d.a,'ether')},
+    {t:'bytes32', v:d.t},
+    {t:'bytes',   v:d.p}
   );
   const hash = web3.utils.soliditySha3(
-    {t:'string',v:'\x19Ethereum Signed Message:\n32'},
-    {t:'bytes32',v:msg}
+    {t:'string',  v:'\x19Ethereum Signed Message:\n32'},
+    {t:'bytes32', v:msg}
   );
 
-  const sig = await ethereum.request({method:'personal_sign', params:[hash, account]});
+  try {
+    const sig = await ethereum.request({method:'personal_sign', params:[hash, account]});
+    const r = sig.slice(0,66);
+    const s = '0x' + sig.slice(66,130);
+    const v = parseInt(sig.slice(130,132),16);
 
-  await contract.methods.claimStealth(
-    r.sender,
-    web3.utils.toWei(r.amt,"ether"),
-    r.stealth,
-    r.ephPub,
-    sig.slice(0,66),
-    '0x'+sig.slice(66,130),
-    parseInt(sig.slice(130,132),16)
-  ).send({from:account});
+    await contract.methods.claimStealth(
+      d.s,
+      web3.utils.toWei(d.a,'ether'),
+      d.t,
+      d.p,
+      r, s, v
+    ).send({from: account});
 
-  log.innerHTML = `领取成功！+${r.amt} GN 到账`;
-  document.getElementById('paste').value = '';
+    log.innerHTML = `领取成功！+${d.a} GN 到账`;
+    document.getElementById('paste').value = '';
+  } catch(e) {
+    log.innerText = "领取失败：" + (e.message || e);
+  }
 };
 </script>
 </body>
