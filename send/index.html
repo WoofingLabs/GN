@@ -41,13 +41,14 @@ button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;
   </div>
 </div>
 
-<!-- 唯一改动：用你第一次能用的 CDN -->
-<script type="module" src="https://cdn.jsdelivr.net/npm/web3@4.3.0/dist/web3.min.js"></script>
+<!-- 100% 复制你 GDOG Swap 的连接方式 -->
+<script src="https://cdn.jsdelivr.net/npm/web3@1.7.0/dist/web3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 
 <script>
 const RPC = 'https://gatelayer-mainnet.gatenode.cc';
 const ADDR = '0xe61472e9AA00AC6707BEBbd00d89D08465FDFDEB';
+const CHAIN_ID = 10088;
 
 const ABI = [
   {"inputs":[{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"stealthTransfer","outputs":[],"stateMutability":"nonpayable","type":"function"},
@@ -57,43 +58,58 @@ const ABI = [
 let web3, account, contract;
 const log = document.getElementById('log');
 
-// 100% 保留你原来的连接方式
+async function switchToGateLayer() {
+  try {
+    await ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x' + CHAIN_ID.toString(16) }]
+    });
+  } catch (e) {
+    if (e.code === 4902) {
+      await ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: '0x' + CHAIN_ID.toString(16),
+          chainName: 'GateLayer',
+          rpcUrls: [RPC],
+          nativeCurrency: { name: 'GT', symbol: 'GT', decimals: 18 },
+          blockExplorerUrls: ['https://www.gatescan.org/gatelayer/']
+        }]
+      });
+    }
+  }
+}
+
 document.getElementById('connect').onclick = async () => {
   if (!window.ethereum) return alert('请安装 MetaMask');
-  try { await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]}); }
-  catch { await ethereum.request({method:'wallet_addEthereumChain', params:[{
-      chainId:'0x2768', chainName:'GateLayer', rpcUrls:[RPC],
-      nativeCurrency:{name:'GT',symbol:'GT',decimals:18}
-  }]});
-  }
-  await ethereum.request({method:'eth_requestAccounts'});
-  account = (await ethereum.request({method:'eth_accounts'}))[0];
+  await switchToGateLayer();
+  await ethereum.request({ method: 'eth_requestAccounts' });
   web3 = new Web3(RPC);
+  account = (await web3.eth.getAccounts())[0];
   contract = new web3.eth.Contract(ABI, ADDR);
-  document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,10) + '...';
+  document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,6)+'...'+account.slice(-4);
   document.getElementById('main').classList.remove('hide');
-  log.innerText = '连接成功';
+  log.innerText = '连接成功！';
 };
 
-// 发送（生成 33 字节合法公钥）
 document.getElementById('send').onclick = async () => {
   const amt = document.getElementById('amt').value.trim();
   if (!amt || amt <= 0) return log.innerText = '请输入数量';
   log.innerText = '生成空投码...';
-  
+
   const stealth = web3.utils.randomHex(32);
-  const eph = new Uint8Array(33); eph[0] = 2;
+  const eph = new Uint8Array(33); eph[0] = 0x02;
   crypto.getRandomValues(eph.subarray(1));
   const ephPub = '0x' + Array.from(eph).map(b=>b.toString(16).padStart(2,'0')).join('');
-  
+
   await contract.methods.stealthTransfer(stealth, ephPub, web3.utils.toWei(amt,'ether')).send({from:account});
-  
+
   const payload = {s:account, a:amt, t:stealth, p:ephPub};
   const code = btoa(JSON.stringify(payload));
   document.getElementById('dark').value = code;
   document.getElementById('code').style.display = 'block';
   document.getElementById('qrcode').innerHTML = '';
-  QRCode.toCanvas(document.getElementById('qrcode'), code, {width:180});
+  QRCode.toCanvas(document.getElementById('qrcode'), code, {width:180, color:{dark:'#00ff88'}});
   log.innerHTML = `成功！已转 ${amt} GN<br>扫码或复制领取`;
 };
 
@@ -103,30 +119,29 @@ window.copy = () => {
   log.innerText = '已复制';
 };
 
-// 领取（标准签名）
 document.getElementById('claim').onclick = async () => {
   const input = document.getElementById('paste').value.trim();
   if (!input) return log.innerText = '请粘贴空投码';
   let d;
   try { d = JSON.parse(atob(input)); } catch { return log.innerText = '空投码错误'; }
-  
+
   log.innerText = '请签名...';
   const msg = web3.utils.keccak256(
-    web3.eth.abi.encodeParameters(['address','uint256','bytes32','bytes'], 
+    web3.eth.abi.encodeParameters(['address','uint256','bytes32','bytes'],
     [d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p])
   );
   const hash = web3.utils.keccak256(
     web3.utils.encodePacked('\x19Ethereum Signed Message:\n32', msg)
   );
-  
+
   const sig = await ethereum.request({method:'personal_sign', params:[hash, account]});
   const r = sig.slice(0,66);
-  const s = '0x'+sig.slice(66,130);
-  let v = parseInt(sig.slice(130,132),16); if(v<27) v+=27;
-  
-  await contract.methods.claimStealth(d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p, r, s, v)
-    .send({from:account});
-  
+  const s = '0x' + sig.slice(66,130);
+  let v = parseInt(sig.slice(130,132),16);
+  if (v < 27) v += 27;
+
+  await contract.methods.claimStealth(d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p, r, s, v).send({from:account});
+
   log.innerHTML = `领取成功！+${d.a} GN 已到账`;
   document.getElementById('paste').value = '';
 };
