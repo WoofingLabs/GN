@@ -22,12 +22,11 @@ button:hover{transform:scale(1.05)}
 <body>
 <div class="c">
   <img src="https://raw.githubusercontent.com/WoofingLabs/Grabbit/main/images/GN.png" class="logo">
-  <h1>GN 隐私空投</h1>
+  <h1>GN 1万空投</h1>
   <button id="connect">连接钱包</button>
 
   <div id="main" class="hide">
-    <input id="amt" placeholder="发多少 GN（整数）" type="number" min="1">
-    <button id="send">发送 + 生成暗号</button>
+    <button id="send">发 1 万 + 生成暗号</button>
 
     <div id="code" style="background:#222;padding:15px;border-radius:12px;margin:15px 0;display:none">
       <textarea id="dark" rows="3" readonly></textarea>
@@ -35,8 +34,8 @@ button:hover{transform:scale(1.05)}
       <button onclick="copyDark()">复制暗号</button>
     </div>
 
-    <textarea id="paste" rows="3" placeholder="粘贴暗号 → 我付 Gas 领 1000 GN"></textarea>
-    <button id="claim">我付 Gas 领 GN</button>
+    <textarea id="paste" rows="3" placeholder="粘贴暗号 → 我付 Gas 领 1万 GN"></textarea>
+    <button id="claim">我付 Gas 领 1万</button>
 
     <div id="log">状态：等待连接</div>
   </div>
@@ -53,34 +52,16 @@ const RPC_URL = 'https://gatelayer-mainnet.gatenode.cc/';
 const CURRENCY = { name: 'GT', symbol: 'GT', decimals: 18 };
 
 // ==================== 合约信息 ====================
-const CONTRACT_ADDR = '0xd7B7F2e8Ddb8AddbfAB284c74524f61A05c0740A';
-const ABI = [
-  {"inputs":[],"stateMutability":"nonpayable","type":"constructor"},
-  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"claim","outputs":[],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"drop","outputs":[],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"burn","outputs":[],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
-  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},
-  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"sender","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":true,"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"Drop","type":"event"},
-  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},
-  {"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"name":"used","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
+const CONTRACT_ADDR = '0x5249bdfE2376AF0d157983B5DFBdD83c3a19E0bd';   // 改1：新地址
+const ABI = [                                              // 改2：只留 drop 和 claim
+  {"inputs":[{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"drop","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"claim","outputs":[],"stateMutability":"nonpayable","type":"function"}
 ];
 
 let web3, account, gn;
 const $ = s => document.querySelector(s);
 const log = $('#log');
 
-// ==================== 切换/添加链 ====================
 async function addOrSwitchChain() {
   const hex = '0x' + CHAIN_ID.toString(16);
   try {
@@ -100,7 +81,6 @@ async function addOrSwitchChain() {
   }
 }
 
-// ==================== 连接钱包 ====================
 async function connect() {
   if (!window.ethereum) return alert('请安装 MetaMask');
   await addOrSwitchChain();
@@ -111,11 +91,10 @@ async function connect() {
 
   $('#connect').innerHTML = `已连接 ${account.slice(0,6)}...${account.slice(-4)}`;
   $('#main').classList.remove('hide');
-  log.innerText = '连接成功！可发可领';
+  log.innerText = '连接成功！点发 1 万';
 }
 $('#connect').onclick = connect;
 
-// ==================== 生成随机 code ====================
 function randomCode() {
   return '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32)))
     .map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -123,26 +102,21 @@ function randomCode() {
 
 // ==================== 发送空投 ====================
 $('#send').onclick = async () => {
-  const amt = $('#amt').value.trim();
-  if (!amt || amt <= 0) return log.innerText = '请输入要发送的 GN 数量';
-  const amount = web3.utils.toWei(amt, 'ether');
-  log.innerText = '正在发送并生成暗号...';
-
-  const code = randomCode();               // bytes32 code
+  log.innerText = '发 1 万中...';
+  const code = randomCode();
   try {
-    await gn.methods.drop(amount, code).send({ from: account });
-    const dark = btoa(code);                // 只放 code，足够简单
+    await gn.methods.drop(code).send({ from: account });         // 改3：drop(code)
+    const dark = btoa(code);
     $('#dark').value = dark;
     $('#code').style.display = 'block';
     $('#qrcode').innerHTML = '';
     QRCode.toCanvas($('#qrcode'), dark, { width: 180, color: { dark: '#00ff88' } });
-    log.innerHTML = `发送成功！已放入 ${amt} GN<br><span style="color:#88ff00">复制暗号发给朋友</span>`;
+    log.innerHTML = `成功！已放 1 万<br><span style="color:#88ff00">复制暗号发朋友</span>`;
   } catch (e) {
-    log.innerHTML = '发送失败：' + (e.message.split('\n')[0] || '检查余额/Gas');
+    log.innerHTML = '失败：' + (e.message.split('\n')[0] || '检查余额');
   }
 };
 
-// ==================== 复制暗号 ====================
 window.copyDark = () => {
   $('#dark').select();
   navigator.clipboard.writeText($('#dark').value);
@@ -154,19 +128,16 @@ $('#claim').onclick = async () => {
   const input = $('#paste').value.trim();
   if (!input) return log.innerText = '请粘贴暗号';
   let code;
-  try { code = atob(input); } catch { return log.innerText = '暗号格式错误'; }
+  try { code = atob(input); } catch { return log.innerText = '暗号错误'; }
   if (!code.startsWith('0x') || code.length !== 66) return log.innerText = '暗号不合法';
 
-  log.innerText = '正在领取 1000 GN...';
+  log.innerText = '领 1 万中...';
   try {
-    await gn.methods.claim(code).send({ from: account });
-    log.innerHTML = `<span style="color:#88ff00">领取成功！+1000 GN 已到账</span>`;
+    await gn.methods.claim(code).send({ from: account });        // 改4：claim(code)
+    log.innerHTML = `<span style="color:#88ff00">成功！+1万 GN 到账</span>`;
     $('#paste').value = '';
   } catch (e) {
-    const msg = e.message.toLowerCase();
-    if (msg.includes('already used')) log.innerHTML = '失败：暗号已被使用';
-    else if (msg.includes('insufficient')) log.innerHTML = '失败：合约余额不足';
-    else log.innerHTML = '领取失败：' + (msg.split('\n')[0] || '请检查暗号');
+    log.innerHTML = e.message.includes('used') ? '已领过' : '失败：余额不足';
   }
 };
 </script>
