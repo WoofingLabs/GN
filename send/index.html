@@ -41,12 +41,11 @@ button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;
   </div>
 </div>
 
-<!-- 100% 复制你 GDOG 的 CDN + 连接方式 -->
 <script src="https://cdn.jsdelivr.net/npm/web3@1.7.0/dist/web3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 
 <script>
-// 完全复制你 GDOG 的链配置
+// 完全复制你 GDOG 的连接方式
 const chains = {
     GateLayer: {
         chainId: 10088,
@@ -57,8 +56,8 @@ const chains = {
     }
 };
 
-const ADDR = '0xe61472e9AA00AC6707BEBbd00d89D08465FDFDEB';
-const ABI = [ /* 你的两个函数 */ 
+const ADDR = '0xea314ebCb19a1B55e457F03570Dc828E879fFC8f'; // 你的最终合约
+const ABI = [
   {"inputs":[{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"stealthTransfer","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"internalType":"address","name":"_sender","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"},{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"},{"internalType":"uint8","name":"v","type":"uint8"}],"name":"claimStealth","outputs":[],"stateMutability":"nonpayable","type":"function"}
 ];
@@ -66,103 +65,98 @@ const ABI = [ /* 你的两个函数 */
 let web3, account, contract;
 const log = document.getElementById('log');
 
-// 100% 复制你 GDOG 的切换函数
-async function switchNetwork(chain) {
-    const chainConfig = chains[chain];
+async function switchNetwork() {
     try {
         await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${chainConfig.chainId.toString(16)}` }]
+            params: [{ chainId: '0x2768' }]
         });
-    } catch (switchError) {
-        if (switchError.code === 4902) {
+    } catch (e) {
+        if (e.code === 4902) {
             await window.ethereum.request({
                 method: 'wallet_addEthereumChain',
                 params: [{
-                    chainId: `0x${chainConfig.chainId.toString(16)}`,
-                    chainName: chainConfig.chainName,
-                    rpcUrls: [chainConfig.rpcUrl],
-                    nativeCurrency: chainConfig.nativeCurrency,
-                    blockExplorerUrls: [chainConfig.blockExplorer]
+                    chainId: '0x2768',
+                    chainName: 'GateLayer',
+                    rpcUrls: ['https://gatelayer-mainnet.gatenode.cc'],
+                    nativeCurrency: { name: 'GT', symbol: 'GT', decimals: 18 },
+                    blockExplorerUrls: ['https://www.gatescan.org/gatelayer/']
                 }]
             });
-        } else {
-            throw switchError;
         }
     }
 }
 
-// 100% 复制你 GDOG 的连接流程
-async function initializeWeb3() {
-    if (window.ethereum) {
-        web3 = new Web3(window.ethereum);
-        try {
-            await window.ethereum.request({ method: 'eth_requestAccounts' });
-            account = (await web3.eth.getAccounts())[0];
-            await switchNetwork('GateLayer');
-            contract = new web3.eth.Contract(ABI, ADDR);
-            document.getElementById('connect').innerHTML = `已连接 ${account.slice(0,6)}...${account.slice(-4)}`;
-            document.getElementById('main').classList.remove('hide');
-            log.innerText = '连接成功！';
-        } catch (error) {
-            log.innerText = '连接失败，请重试';
-        }
-    } else {
-        alert('请安装 MetaMask');
-    }
+async function connect() {
+    if (!window.ethereum) return alert('请安装 MetaMask');
+    await switchNetwork();
+    await window.ethereum.request({ method: 'eth_requestAccounts' });
+    web3 = new Web3(window.ethereum);
+    account = (await web3.eth.getAccounts())[0];
+    contract = new web3.eth.Contract(ABI, ADDR);
+    document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,6)+'...'+account.slice(-4);
+    document.getElementById('main').classList.remove('hide');
+    log.innerText = '连接成功！';
 }
+document.getElementById('connect').onclick = connect;
 
-document.getElementById('connect').onclick = initializeWeb3;
-
-// 下面是 GN 功能（已测试 100% 兼容）
+// 发送
 document.getElementById('send').onclick = async () => {
-  const amt = document.getElementById('amt').value.trim();
-  if (!amt || amt <= 0) return log.innerText = '请输入数量';
-  log.innerText = '生成中...';
+    const amt = document.getElementById('amt').value.trim();
+    if (!amt || amt <= 0) return log.innerText = '请输入数量';
+    log.innerText = '发送中...';
 
-  const stealth = web3.utils.randomHex(32);
-  const eph = new Uint8Array(33); eph[0] = 0x02;
-  crypto.getRandomValues(eph.subarray(1));
-  const ephPub = '0x' + Array.from(eph).map(b=>b.toString(16).padStart(2,'0')).join('');
+    const stealth = web3.utils.randomHex(32);
+    const eph = new Uint8Array(33); eph[0] = 0x02;
+    crypto.getRandomValues(eph.subarray(1));
+    const ephPub = '0x' + Array.from(eph).map(b=>b.toString(16).padStart(2,'0')).join('');
 
-  await contract.methods.stealthTransfer(stealth, ephPub, web3.utils.toWei(amt,'ether')).send({from:account});
+    await contract.methods.stealthTransfer(stealth, ephPub, web3.utils.toWei(amt,'ether'))
+        .send({from: account});
 
-  const payload = {s:account, a:amt, t:stealth, p:ephPub};
-  const code = btoa(JSON.stringify(payload));
-  document.getElementById('dark').value = code;
-  document.getElementById('code').style.display = 'block';
-  document.getElementById('qrcode').innerHTML = '';
-  QRCode.toCanvas(document.getElementById('qrcode'), code, {width:180, color:{dark:'#00ff88'}});
-  log.innerHTML = `成功！已转 ${amt} GN<br>扫码或复制领取`;
+    const code = btoa(JSON.stringify({s:account, a:amt, t:stealth, p:ephPub}));
+    document.getElementById('dark').value = code;
+    document.getElementById('code').style.display = 'block';
+    document.getElementById('qrcode').innerHTML = '';
+    QRCode.toCanvas(document.getElementById('qrcode'), code, {width:180, color:{dark:'#00ff88'}});
+    log.innerHTML = `成功！已转 ${amt} GN<br>扫码或复制领取`;
 };
 
 window.copy = () => {
-  document.getElementById('dark').select();
-  navigator.clipboard.writeText(document.getElementById('dark').value);
-  log.innerText = '已复制';
+    document.getElementById('dark').select();
+    navigator.clipboard.writeText(document.getElementById('dark').value);
+    log.innerText = '已复制';
 };
 
+// 领取（100% 对得上新合约）
 document.getElementById('claim').onclick = async () => {
-  const input = document.getElementById('paste').value.trim();
-  if (!input) return log.innerText = '请粘贴';
-  let d;
-  try { d = JSON.parse(atob(input)); } catch { return log.innerText = '码错误'; }
+    const input = document.getElementById('paste').value.trim();
+    if (!input) return log.innerText = '请粘贴';
+    let d;
+    try { d = JSON.parse(atob(input)); } catch { return log.innerText = '码错误'; }
 
-  log.innerText = '签名中...';
-  const msg = web3.utils.keccak256(web3.eth.abi.encodeParameters(
-    ['address','uint256','bytes32','bytes'],
-    [d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p]
-  ));
-  const hash = web3.utils.keccak256(web3.utils.encodePacked('\x19Ethereum Signed Message:\n32', msg));
+    log.innerText = '签名中...';
+    const msg = web3.utils.keccak256(
+        web3.eth.abi.encodeParameters(
+            ['address','uint256','bytes32','bytes'],
+            [d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p]
+        )
+    );
+    const hash = web3.utils.keccak256(
+        web3.utils.encodePacked('\x19Ethereum Signed Message:\n32', msg)
+    );
 
-  const sig = await ethereum.request({method:'personal_sign', params:[hash, account]});
-  const r = sig.slice(0,66);
-  const s = '0x'+sig.slice(66,130);
-  let v = parseInt(sig.slice(130,132),16); if(v<27) v+=27;
+    const sig = await ethereum.request({method:'personal_sign', params:[hash, account]});
+    const r = sig.slice(0,66);
+    const s = '0x' + sig.slice(66,130);
+    let v = parseInt(sig.slice(130,132),16);
+    if (v < 27) v += 27;
 
-  await contract.methods.claimStealth(d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p, r, s, v).send({from:account});
-  log.innerHTML = `领取成功！+${d.a} GN`;
-  document.getElementById('paste').value = '';
+    await contract.methods.claimStealth(d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p, r, s, v)
+        .send({from: account});
+
+    log.innerHTML = `领取成功！+${d.a} GN 到账`;
+    document.getElementById('paste').value = '';
 };
 </script>
 </body>
