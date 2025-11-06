@@ -45,10 +45,18 @@ button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 
 <script>
-const RPC = 'https://gatelayer-mainnet.gatenode.cc';
-const ADDR = '0x57F46345eC70a8c9a9BA7F8c67A0355573596749';
-const CHAIN_ID = '10088';
+// 10088 链（和你 GDOG 完全一致）
+const chains = {
+    GateLayer: {
+        chainId: 10088,
+        chainName: 'Gate Layer',
+        rpcUrl: 'https://gatelayer-mainnet.gatenode.cc/',
+        blockExplorer: 'https://www.gatescan.org/gatelayer/',
+        nativeCurrency: { name: 'GT', symbol: 'GT', decimals: 18 }
+    }
+};
 
+const ADDR = '0x57F46345eC70a8c9a9BA7F8c67A0355573596749';
 const ABI = [
   {"inputs":[{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"stealthTransfer","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"internalType":"address","name":"_sender","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"},{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"},{"internalType":"uint8","name":"v","type":"uint8"}],"name":"claimStealth","outputs":[],"stateMutability":"nonpayable","type":"function"}
@@ -57,82 +65,98 @@ const ABI = [
 let web3, account, contract;
 const log = document.getElementById('log');
 
-async function connect() {
-  if (!window.ethereum) return alert('请安装 MetaMask');
-  try {
-    await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId: CHAIN_ID}]});
-  } catch {
-    await ethereum.request({method:'wallet_addEthereumChain', params:[{
-      chainId: CHAIN_ID, chainName:'GateLayer', rpcUrls:[RPC],
-      nativeCurrency:{name:'GT',symbol:'GT',decimals:18}
-    }]});
-  }
-  await ethereum.request({method:'eth_requestAccounts'});
-  web3 = new Web3(RPC);
-  account = (await web3.eth.getAccounts())[0];
-  contract = new web3.eth.Contract(ABI, ADDR);
-  document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,6)+'...'+account.slice(-4);
-  document.getElementById('main').classList.remove('hide');
-  log.innerText = '连接成功！';
+// 10088 连接方式（复制你 GDOG）
+async function switchNetwork() {
+    const chain = chains.GateLayer;
+    try {
+        await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: `0x${chain.chainId.toString(16)}` }]
+        });
+    } catch (e) {
+        if (e.code === 4902) {
+            await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                    chainId: `0x${chain.chainId.toString(16)}`,
+                    chainName: chain.chainName,
+                    rpcUrls: [chain.rpcUrl],
+                    nativeCurrency: chain.nativeCurrency,
+                    blockExplorerUrls: [chain.blockExplorer]
+                }]
+            });
+        }
+    }
 }
-document.getElementById('connect').onclick = connect;
 
+async function connectWallet() {
+    if (!window.ethereum) return alert('请安装 MetaMask');
+    await switchNetwork();
+    await window.ethereum.request({ method: 'eth_requestAccounts' });
+    web3 = new Web3(window.ethereum);
+    account = (await web3.eth.getAccounts())[0];
+    contract = new web3.eth.Contract(ABI, ADDR);
+    document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,6)+'...'+account.slice(-4);
+    document.getElementById('main').classList.remove('hide');
+    log.innerText = '连接成功！';
+}
+document.getElementById('connect').onclick = connectWallet;
+
+// 发送
 document.getElementById('send').onclick = async () => {
-  const amt = document.getElementById('amt').value.trim();
-  if (!amt || amt <= 0) return log.innerText = '请输入数量';
-  log.innerText = '发送中...';
+    const amt = document.getElementById('amt').value.trim();
+    if (!amt || amt <= 0) return log.innerText = '请输入数量';
+    log.innerText = '发送中...';
 
-  const stealth = web3.utils.randomHex(32);
-  const eph = new Uint8Array(33); eph[0] = 0x02;
-  crypto.getRandomValues(eph.subarray(1));
-  const ephPub = '0x' + Array.from(eph).map(b=>b.toString(16).padStart(2,'0')).join('');
+    const stealth = web3.utils.randomHex(32);
+    const eph = new Uint8Array(33);
+    eph[0] = 0x02 + (crypto.getRandomValues(new Uint8Array(1))[0] % 2); // 02 or 03
+    crypto.getRandomValues(eph.subarray(1));
+    const ephPub = '0x' + Array.from(eph).map(b=>b.toString(16).padStart(2,'0')).join('');
 
-  await contract.methods.stealthTransfer(stealth, ephPub, web3.utils.toWei(amt,'ether')).send({from:account});
+    await contract.methods.stealthTransfer(stealth, ephPub, web3.utils.toWei(amt,'ether')).send({from:account});
 
-  const payload = {s:account, a:amt, t:stealth, p:ephPub};
-  const code = btoa(JSON.stringify(payload));
-  document.getElementById('dark').value = code;
-  document.getElementById('code').style.display = 'block';
-  document.getElementById('qrcode').innerHTML = '';
-  QRCode.toCanvas(document.getElementById('qrcode'), code, {width:180, color:{dark:'#00ff88'}});
-  log.innerHTML = `成功！已转 ${amt} GN<br>扫码或复制领取`;
+    const payload = {s:account, a:amt, t:stealth, p:ephPub};
+    const code = btoa(JSON.stringify(payload));
+    document.getElementById('dark').value = code;
+    document.getElementById('code').style.display = 'block';
+    document.getElementById('qrcode').innerHTML = '';
+    QRCode.toCanvas(document.getElementById('qrcode'), code, {width:180, color:{dark:'#00ff88'}});
+    log.innerHTML = `成功！已转 ${amt} GN<br>扫码或复制领取`;
 };
 
 window.copy = () => {
-  document.getElementById('dark').select();
-  navigator.clipboard.writeText(document.getElementById('dark').value);
-  log.innerText = '已复制';
+    document.getElementById('dark').select();
+    navigator.clipboard.writeText(document.getElementById('dark').value);
+    log.innerText = '已复制';
 };
 
-// 关键修复：直接传 message，不加前缀
+// 领取（关键 1 行：不加前缀）
 document.getElementById('claim').onclick = async () => {
-  const input = document.getElementById('paste').value.trim();
-  if (!input) return log.innerText = '请粘贴';
-  let d;
-  try { d = JSON.parse(atob(input)); } catch { return log.innerText = '码错误'; }
+    const input = document.getElementById('paste').value.trim();
+    if (!input) return log.innerText = '请粘贴';
+    let d;
+    try { d = JSON.parse(atob(input)); } catch { return log.innerText = '码错误'; }
 
-  log.innerText = '签名中...';
-  const msg = web3.utils.keccak256(
-    web3.eth.abi.encodeParameters(
-      ['address','uint256','bytes32','bytes'],
-      [d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p]
-    )
-  );
+    log.innerText = '签名中...';
+    const msg = web3.utils.keccak256(
+        web3.eth.abi.encodeParameters(
+            ['address','uint256','bytes32','bytes'],
+            [d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p]
+        )
+    );
 
-  // 删除这行！让 MetaMask 自己加前缀
-  // const hash = web3.utils.keccak256(web3.utils.encodePacked('\x19Ethereum Signed Message:\n32', msg));
-  const hash = msg; // 直接传原始 message
+    // 关键修复：直接传 msg，不加前缀
+    const sig = await ethereum.request({method:'personal_sign', params:[msg, account]});
+    const r = sig.slice(0,66);
+    const s = '0x' + sig.slice(66,130);
+    let v = parseInt(sig.slice(130,132),16);
+    if (v < 27) v += 27;
 
-  const sig = await ethereum.request({method:'personal_sign', params:[hash, account]});
-  const r = sig.slice(0,66);
-  const s = '0x' + sig.slice(66,130);
-  let v = parseInt(sig.slice(130,132),16);
-  if (v < 27) v += 27;
+    await contract.methods.claimStealth(d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p, r, s, v).send({from:account});
 
-  await contract.methods.claimStealth(d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p, r, s, v).send({from:account});
-
-  log.innerHTML = `领取成功！+${d.a} GN 到账`;
-  document.getElementById('paste').value = '';
+    log.innerHTML = `领取成功！+${d.a} GN 到账`;
+    document.getElementById('paste').value = '';
 };
 </script>
 </body>
