@@ -56,7 +56,7 @@ const chains = {
     }
 };
 
-const ADDR = '0x3D9c9CB23AD08Cf2276D6D1Cc5FC60A2D1b19115'; // 你最新合约
+const ADDR = '0x3D9c9CB23AD08Cf2276D6D1Cc5FC60A2D1b19115';
 const ABI = [
   {"inputs":[{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"stealthTransfer","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"internalType":"address","name":"_sender","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"},{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"},{"internalType":"uint8","name":"v","type":"uint8"}],"name":"claimStealth","outputs":[],"stateMutability":"nonpayable","type":"function"}
@@ -65,7 +65,6 @@ const ABI = [
 let web3, account, contract;
 const log = document.getElementById('log');
 
-// 10088 链切换
 async function switchTo10088() {
     const c = chains.GateLayer;
     try {
@@ -88,7 +87,6 @@ async function switchTo10088() {
     }
 }
 
-// 连接
 async function connect() {
     if (!window.ethereum) return alert('请安装 MetaMask');
     await switchTo10088();
@@ -102,7 +100,6 @@ async function connect() {
 }
 document.getElementById('connect').onclick = connect;
 
-// 发送
 document.getElementById('send').onclick = async () => {
     const amt = document.getElementById('amt').value.trim();
     if (!amt || amt <= 0) return log.innerText = '请输入数量';
@@ -130,14 +127,14 @@ window.copy = () => {
     log.innerText = '已复制！';
 };
 
-// 领取（完美匹配你最新合约）
+// 领取（已删除 `, ""` 背刺）
 document.getElementById('claim').onclick = async () => {
     const input = document.getElementById('paste').value.trim();
     if (!input) return log.innerText = '请粘贴暗号';
     let d;
     try { d = JSON.parse(atob(input)); } catch { return log.innerText = '暗号错误'; }
 
-    log.innerText = '签名中...';
+    log.innerText = '请签名...';
     const msg = web3.utils.keccak256(
         web3.eth.abi.encodeParameters(
             ['address','uint256','bytes32','bytes'],
@@ -145,7 +142,9 @@ document.getElementById('claim').onclick = async () => {
         )
     );
 
-    const sig = await ethereum.request({method:'personal_sign', params:[msg, account, ""]});
+    // 终极修复：只传两个参数
+    const sig = await ethereum.request({method:'personal_sign', params:[msg, account]});
+
     const r = sig.slice(0,66);
     const s = '0x' + sig.slice(66,130);
     let v = parseInt(sig.slice(130,132),16);
