@@ -42,12 +42,12 @@ button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;
 </div>
 
 <script type="module">
-import Web3 from 'https://cdn.jsdelivr.net/npm/web3@4.3.0/+esm';
-import QRCode from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+import Web3 from 'https://cdn.skypack.dev/web3@4.3.0';
+import QRCode from 'https://cdn.skypack.dev/qrcode@1.5.3';
 
 const RPC = 'https://gatelayer-mainnet.gatenode.cc';
 const ADDR = '0xe61472e9AA00AC6707BEBbd00d89D08465FDFDEB';
-const CHAIN_ID = 0x2768;
+const CHAIN_ID = '0x2768';
 
 const ABI = [
   {"inputs":[{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"stealthTransfer","outputs":[],"stateMutability":"nonpayable","type":"function"},
@@ -60,10 +60,10 @@ const log = document.getElementById('log');
 document.getElementById('connect').onclick = async () => {
   if (!window.ethereum) return alert('请安装 MetaMask');
   try {
-    await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId:'0x2768'}]});
+    await ethereum.request({method:'wallet_switchEthereumChain', params:[{chainId: CHAIN_ID}]});
   } catch {
     await ethereum.request({method:'wallet_addEthereumChain', params:[{
-      chainId:'0x2768', chainName:'GateLayer', rpcUrls:[RPC],
+      chainId: CHAIN_ID, chainName:'GateLayer', rpcUrls:[RPC],
       nativeCurrency:{name:'GT',symbol:'GT',decimals:18}
     }]});
   }
@@ -114,9 +114,9 @@ document.getElementById('claim').onclick = async () => {
     ['address','uint256','bytes32','bytes'],
     [d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p]
   ));
-  const prefixed = web3.utils.keccak256(web3.utils.encodePacked(
-    '\x19Ethereum Signed Message:\n32', msg
-  ));
+  const prefixed = web3.utils.keccak256(
+    web3.utils.encodePacked('\x19Ethereum Signed Message:\n32', msg)
+  );
   
   const sig = await ethereum.request({method:'personal_sign', params:[prefixed, account]});
   const r = sig.slice(0,66);
