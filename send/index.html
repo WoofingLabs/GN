@@ -12,7 +12,8 @@ body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:10
 h1{font-size:26px;text-align:center;background:linear-gradient(90deg,#00ff88,#88ff00);-webkit-background-clip:text;color:transparent}
 input,button,textarea{width:100%;padding:14px;margin:10px 0;border-radius:14px;font-size:16px}
 input,textarea{background:#000;border:1px solid #333;color:#fff;outline:none}
-button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;height:55px}
+button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;height:55px;transition:all .3s}
+button:hover{transform:scale(1.05);box-shadow:0 0 20px #00ff88}
 #log{color:#0f0;text-align:center;margin-top:10px;font-size:14px;line-height:1.6}
 .hide{display:none}
 #qrcode{text-align:center;margin:15px 0}
@@ -37,7 +38,7 @@ button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;
     <textarea id="paste" rows="3" placeholder="粘贴空投码 → 我付 Gas 领取"></textarea>
     <button id="claim">我付 Gas 领取</button>
 
-    <div id="log">状态：等待操作</div>
+    <div id="log">状态：等待连接</div>
   </div>
 </div>
 
@@ -45,7 +46,7 @@ button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 
 <script>
-// 完全复制你 GDOG 的连接方式
+// 10088 链配置（和你 GDOG 完全一致）
 const chains = {
     GateLayer: {
         chainId: 10088,
@@ -56,7 +57,7 @@ const chains = {
     }
 };
 
-const ADDR = '0x57F46345eC70a8c9a9BA7F8c67A0355573596749'; // 你的最终合约
+const ADDR = '0x57F46345eC70a8c9a9BA7F8c67A0355573596749'; // 你的终极合约
 const ABI = [
   {"inputs":[{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"stealthTransfer","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"internalType":"address","name":"_sender","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"},{"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},{"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},{"internalType":"bytes32","name":"r","type":"bytes32"},{"internalType":"bytes32","name":"s","type":"bytes32"},{"internalType":"uint8","name":"v","type":"uint8"}],"name":"claimStealth","outputs":[],"stateMutability":"nonpayable","type":"function"}
@@ -65,29 +66,31 @@ const ABI = [
 let web3, account, contract;
 const log = document.getElementById('log');
 
+// 100% 复制你 GDOG 的连接方式
 async function switchNetwork() {
+    const chain = chains.GateLayer;
     try {
         await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x2768' }]
+            params: [{ chainId: `0x${chain.chainId.toString(16)}` }]
         });
     } catch (e) {
         if (e.code === 4902) {
             await window.ethereum.request({
                 method: 'wallet_addEthereumChain',
                 params: [{
-                    chainId: '0x2768',
-                    chainName: 'GateLayer',
-                    rpcUrls: ['https://gatelayer-mainnet.gatenode.cc'],
-                    nativeCurrency: { name: 'GT', symbol: 'GT', decimals: 18 },
-                    blockExplorerUrls: ['https://www.gatescan.org/gatelayer/']
+                    chainId: `0x${chain.chainId.toString(16)}`,
+                    chainName: chain.chainName,
+                    rpcUrls: [chain.rpcUrl],
+                    nativeCurrency: chain.nativeCurrency,
+                    blockExplorerUrls: [chain.blockExplorer]
                 }]
             });
         }
     }
 }
 
-async function connect() {
+async function connectWallet() {
     if (!window.ethereum) return alert('请安装 MetaMask');
     await switchNetwork();
     await window.ethereum.request({ method: 'eth_requestAccounts' });
@@ -96,46 +99,52 @@ async function connect() {
     contract = new web3.eth.Contract(ABI, ADDR);
     document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,6)+'...'+account.slice(-4);
     document.getElementById('main').classList.remove('hide');
-    log.innerText = '连接成功！';
+    log.innerHTML = '<span style="color:#88ff00">连接成功！可发可领</span>';
 }
-document.getElementById('connect').onclick = connect;
+document.getElementById('connect').onclick = connectWallet;
 
 // 发送
 document.getElementById('send').onclick = async () => {
     const amt = document.getElementById('amt').value.trim();
     if (!amt || amt <= 0) return log.innerText = '请输入数量';
-    log.innerText = '发送中...';
+    log.innerHTML = '发送中...';
 
     const stealth = web3.utils.randomHex(32);
-    const eph = new Uint8Array(33); eph[0] = 0x02;
+    const eph = new Uint8Array(33);
+    eph[0] = Math.random() < 0.5 ? 0x02 : 0x03;
     crypto.getRandomValues(eph.subarray(1));
     const ephPub = '0x' + Array.from(eph).map(b=>b.toString(16).padStart(2,'0')).join('');
 
-    await contract.methods.stealthTransfer(stealth, ephPub, web3.utils.toWei(amt,'ether'))
-        .send({from: account});
-
-    const code = btoa(JSON.stringify({s:account, a:amt, t:stealth, p:ephPub}));
-    document.getElementById('dark').value = code;
-    document.getElementById('code').style.display = 'block';
-    document.getElementById('qrcode').innerHTML = '';
-    QRCode.toCanvas(document.getElementById('qrcode'), code, {width:180, color:{dark:'#00ff88'}});
-    log.innerHTML = `成功！已转 ${amt} GN<br>扫码或复制领取`;
+    try {
+        await contract.methods.stealthTransfer(stealth, ephPub, web3.utils.toWei(amt,'ether'))
+            .send({from: account});
+        
+        const payload = {s:account, a:amt, t:stealth, p:ephPub};
+        const code = btoa(JSON.stringify(payload));
+        document.getElementById('dark').value = code;
+        document.getElementById('code').style.display = 'block';
+        document.getElementById('qrcode').innerHTML = '';
+        QRCode.toCanvas(document.getElementById('qrcode'), code, {width:180, color:{dark:'#00ff88'}});
+        log.innerHTML = `成功！已转 ${amt} GN<br><span style="color:#88ff00">扫码/复制，任意人可领！</span>`;
+    } catch (e) {
+        log.innerHTML = '发送失败：' + (e.message || '请检查余额');
+    }
 };
 
 window.copy = () => {
     document.getElementById('dark').select();
     navigator.clipboard.writeText(document.getElementById('dark').value);
-    log.innerText = '已复制';
+    log.innerHTML = '<span style="color:#88ff00">已复制！发给任何人</span>';
 };
 
-// 领取（100% 对得上新合约）
+// 领取（100% 对得上 abi.encodePacked）
 document.getElementById('claim').onclick = async () => {
     const input = document.getElementById('paste').value.trim();
-    if (!input) return log.innerText = '请粘贴';
+    if (!input) return log.innerText = '请粘贴空投码';
     let d;
-    try { d = JSON.parse(atob(input)); } catch { return log.innerText = '码错误'; }
+    try { d = JSON.parse(atob(input)); } catch { return log.innerText = '无效码'; }
 
-    log.innerText = '签名中...';
+    log.innerHTML = '签名中...';
     const msg = web3.utils.keccak256(
         web3.eth.abi.encodeParameters(
             ['address','uint256','bytes32','bytes'],
@@ -146,17 +155,21 @@ document.getElementById('claim').onclick = async () => {
         web3.utils.encodePacked('\x19Ethereum Signed Message:\n32', msg)
     );
 
-    const sig = await ethereum.request({method:'personal_sign', params:[hash, account]});
-    const r = sig.slice(0,66);
-    const s = '0x' + sig.slice(66,130);
-    let v = parseInt(sig.slice(130,132),16);
-    if (v < 27) v += 27;
+    try {
+        const sig = await ethereum.request({method:'personal_sign', params:[hash, account]});
+        const r = sig.slice(0,66);
+        const s = '0x' + sig.slice(66,130);
+        let v = parseInt(sig.slice(130,132),16);
+        if (v < 27) v += 27;
 
-    await contract.methods.claimStealth(d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p, r, s, v)
-        .send({from: account});
+        await contract.methods.claimStealth(d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p, r, s, v)
+            .send({from: account});
 
-    log.innerHTML = `领取成功！+${d.a} GN 到账`;
-    document.getElementById('paste').value = '';
+        log.innerHTML = `<span style="color:#88ff00">领取成功！+${d.a} GN 到账</span>`;
+        document.getElementById('paste').value = '';
+    } catch (e) {
+        log.innerHTML = '领取失败：' + (e.message.includes('Invalid signature') ? '请重新粘贴码' : e.message);
+    }
 };
 </script>
 </body>
