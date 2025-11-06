@@ -12,7 +12,7 @@ body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:10
 h1{font-size:26px;text-align:center;background:linear-gradient(90deg,#00ff88,#88ff00);-webkit-background-clip:text;color:transparent}
 input,button,textarea{width:100%;padding:14px;margin:10px 0;border-radius:14px;font-size:16px}
 input,textarea{background:#000;border:1px solid #333;color:#fff;outline:none}
-button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;height:55px;transition:0.3s}
+button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;height:55px;transition:.3s}
 button:hover{transform:scale(1.05)}
 #log{color:#0f0;text-align:center;margin-top:10px;font-size:14px;line-height:1.6}
 .hide{display:none}
@@ -26,16 +26,16 @@ button:hover{transform:scale(1.05)}
   <button id="connect">连接钱包</button>
 
   <div id="main" class="hide">
-    <input id="amt" placeholder="发多少 GN" type="number" step="any">
+    <input id="amt" placeholder="发多少 GN（整数）" type="number" min="1">
     <button id="send">发送 + 生成暗号</button>
 
     <div id="code" style="background:#222;padding:15px;border-radius:12px;margin:15px 0;display:none">
       <textarea id="dark" rows="3" readonly></textarea>
       <div id="qrcode"></div>
-      <button onclick="copy()">复制暗号</button>
+      <button onclick="copyDark()">复制暗号</button>
     </div>
 
-    <textarea id="paste" rows="3" placeholder="粘贴暗号 → 我付 Gas 领"></textarea>
+    <textarea id="paste" rows="3" placeholder="粘贴暗号 → 我付 Gas 领 1000 GN"></textarea>
     <button id="claim">我付 Gas 领 GN</button>
 
     <div id="log">状态：等待连接</div>
@@ -46,153 +46,128 @@ button:hover{transform:scale(1.05)}
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 
 <script>
-// 10088 链完整配置
-const chains = {
-    GateLayer: {
-        chainId: 10088,
-        chainName: 'Gate Layer',
-        rpcUrl: 'https://gatelayer-mainnet.gatenode.cc/',
-        nativeCurrency: { name: 'GT', symbol: 'GT', decimals: 18 }
-    }
-};
+// ==================== 链配置 ====================
+const CHAIN_ID = 10088;
+const CHAIN_NAME = 'Gate Layer';
+const RPC_URL = 'https://gatelayer-mainnet.gatenode.cc/';
+const CURRENCY = { name: 'GT', symbol: 'GT', decimals: 18 };
 
-// 你最新合约地址
-const ADDR = '0xfCD2089F78632b75a19370Cd891F3F9dfa62c40C';
-
-// 完整 ABI（一个字不漏）
+// ==================== 合约信息 ====================
+const CONTRACT_ADDR = '0xd7B7F2e8Ddb8AddbfAB284c74524f61A05c0740A';
 const ABI = [
-  {
-    "inputs": [
-      {"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},
-      {"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},
-      {"internalType":"uint256","name":"_amount","type":"uint256"}
-    ],
-    "name":"stealthTransfer",
-    "outputs":[],
-    "stateMutability":"nonpayable",
-    "type":"function"
-  },
-  {
-    "inputs": [
-      {"internalType":"address","name":"_sender","type":"address"},
-      {"internalType":"uint256","name":"_amount","type":"uint256"},
-      {"internalType":"bytes32","name":"_stealthAddress","type":"bytes32"},
-      {"internalType":"bytes","name":"_ephemeralPubKey","type":"bytes"},
-      {"internalType":"bytes32","name":"r","type":"bytes32"},
-      {"internalType":"bytes32","name":"s","type":"bytes32"},
-      {"internalType":"uint8","name":"v","type":"uint8"}
-    ],
-    "name":"claimStealth",
-    "outputs":[],
-    "stateMutability":"nonpayable",
-    "type":"function"
-  }
+  {"inputs":[],"stateMutability":"nonpayable","type":"constructor"},
+  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"claim","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"drop","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"burn","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"sender","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":true,"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"Drop","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},
+  {"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"name":"used","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
 ];
 
-let web3, account, contract;
-const log = document.getElementById('log');
+let web3, account, gn;
+const $ = s => document.querySelector(s);
+const log = $('#log');
 
-// 自动切 10088 链
-async function switchTo10088() {
-    const c = chains.GateLayer;
-    try {
-        await ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${c.chainId.toString(16)}` }]
-        });
-    } catch (e) {
-        if (e.code === 4902) {
-            await ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [{
-                    chainId: `0x${c.chainId.toString(16)}`,
-                    chainName: c.chainName,
-                    rpcUrls: [c.rpcUrl],
-                    nativeCurrency: c.nativeCurrency
-                }]
-            });
-        }
-    }
+// ==================== 切换/添加链 ====================
+async function addOrSwitchChain() {
+  const hex = '0x' + CHAIN_ID.toString(16);
+  try {
+    await ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hex }] });
+  } catch (e) {
+    if (e.code === 4902) {
+      await ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: hex,
+          chainName: CHAIN_NAME,
+          rpcUrls: [RPC_URL],
+          nativeCurrency: CURRENCY
+        }]
+      });
+    } else throw e;
+  }
 }
 
-// 连接钱包
+// ==================== 连接钱包 ====================
 async function connect() {
-    if (!window.ethereum) return alert('请安装 MetaMask');
-    await switchTo10088();
-    await ethereum.request({method:'eth_requestAccounts'});
-    web3 = new Web3(window.ethereum);
-    account = (await web3.eth.getAccounts())[0];
-    contract = new web3.eth.Contract(ABI, ADDR);
-    document.getElementById('connect').innerHTML = '已连接 ' + account.slice(0,6)+'...'+account.slice(-4);
-    document.getElementById('main').classList.remove('hide');
-    log.innerText = '连接成功！可发可领';
+  if (!window.ethereum) return alert('请安装 MetaMask');
+  await addOrSwitchChain();
+  await ethereum.request({ method: 'eth_requestAccounts' });
+  web3 = new Web3(window.ethereum);
+  [account] = await web3.eth.getAccounts();
+  gn = new web3.eth.Contract(ABI, CONTRACT_ADDR);
+
+  $('#connect').innerHTML = `已连接 ${account.slice(0,6)}...${account.slice(-4)}`;
+  $('#main').classList.remove('hide');
+  log.innerText = '连接成功！可发可领';
 }
-document.getElementById('connect').onclick = connect;
+$('#connect').onclick = connect;
 
-// 发送空投
-document.getElementById('send').onclick = async () => {
-    const amt = document.getElementById('amt').value.trim();
-    if (!amt || amt <= 0) return log.innerText = '请输入数量';
-    log.innerText = '发送中...';
+// ==================== 生成随机 code ====================
+function randomCode() {
+  return '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32)))
+    .map(b=>b.toString(16).padStart(2,'0')).join('');
+}
 
-    const stealth = web3.utils.randomHex(32);
-    const eph = new Uint8Array(33); eph[0] = 0x02;
-    crypto.getRandomValues(eph.subarray(1));
-    const ephPub = '0x' + Array.from(eph).map(b=>b.toString(16).padStart(2,'0')).join('');
+// ==================== 发送空投 ====================
+$('#send').onclick = async () => {
+  const amt = $('#amt').value.trim();
+  if (!amt || amt <= 0) return log.innerText = '请输入要发送的 GN 数量';
+  const amount = web3.utils.toWei(amt, 'ether');
+  log.innerText = '正在发送并生成暗号...';
 
-    try {
-        await contract.methods.stealthTransfer(stealth, ephPub, web3.utils.toWei(amt,'ether'))
-            .send({from: account, gas: 500000});
-        
-        const payload = {s:account, a:amt, t:stealth, p:ephPub};
-        const code = btoa(JSON.stringify(payload));
-        document.getElementById('dark').value = code;
-        document.getElementById('code').style.display = 'block';
-        document.getElementById('qrcode').innerHTML = '';
-        QRCode.toCanvas(document.getElementById('qrcode'), code, {width:180, color:{dark:'#00ff88'}});
-        log.innerHTML = `成功！已发 ${amt} GN<br><span style="color:#88ff00">复制暗号发给任何人</span>`;
-    } catch (e) {
-        log.innerHTML = '发送失败：' + (e.message || '请检查余额');
-    }
+  const code = randomCode();               // bytes32 code
+  try {
+    await gn.methods.drop(amount, code).send({ from: account });
+    const dark = btoa(code);                // 只放 code，足够简单
+    $('#dark').value = dark;
+    $('#code').style.display = 'block';
+    $('#qrcode').innerHTML = '';
+    QRCode.toCanvas($('#qrcode'), dark, { width: 180, color: { dark: '#00ff88' } });
+    log.innerHTML = `发送成功！已放入 ${amt} GN<br><span style="color:#88ff00">复制暗号发给朋友</span>`;
+  } catch (e) {
+    log.innerHTML = '发送失败：' + (e.message.split('\n')[0] || '检查余额/Gas');
+  }
 };
 
-window.copy = () => {
-    document.getElementById('dark').select();
-    navigator.clipboard.writeText(document.getElementById('dark').value);
-    log.innerText = '暗号已复制！';
+// ==================== 复制暗号 ====================
+window.copyDark = () => {
+  $('#dark').select();
+  navigator.clipboard.writeText($('#dark').value);
+  log.innerText = '暗号已复制！';
 };
 
-// 领取（v=28 自动变 27 + 自动 Gas）
-document.getElementById('claim').onclick = async () => {
-    const input = document.getElementById('paste').value.trim();
-    if (!input) return log.innerText = '请粘贴暗号';
-    let d;
-    try { d = JSON.parse(atob(input)); } catch { return log.innerText = '暗号错误'; }
+// ==================== 领取 ====================
+$('#claim').onclick = async () => {
+  const input = $('#paste').value.trim();
+  if (!input) return log.innerText = '请粘贴暗号';
+  let code;
+  try { code = atob(input); } catch { return log.innerText = '暗号格式错误'; }
+  if (!code.startsWith('0x') || code.length !== 66) return log.innerText = '暗号不合法';
 
-    log.innerText = '请签名...';
-    const msg = web3.utils.keccak256(
-        web3.eth.abi.encodeParameters(
-            ['address','uint256','bytes32','bytes'],
-            [d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p]
-        )
-    );
-
-    const sig = await ethereum.request({method:'personal_sign', params:[msg, account]});
-    const r = sig.slice(0,66);
-    const s = '0x' + sig.slice(66,130);
-    let v = parseInt(sig.slice(130,132),16);
-    if (v < 27) v += 27;
-    if (v > 30) v -= 1; // 老 MetaMask v=28 自动修复
-
-    log.innerText = '正在领取代币...';
-    try {
-        await contract.methods.claimStealth(d.s, web3.utils.toWei(d.a,'ether'), d.t, d.p, r, s, v)
-            .send({from: account, gas: 300000});
-        log.innerHTML = `<span style="color:#88ff00">领取成功！+${d.a} GN 已到账</span>`;
-        document.getElementById('paste').value = '';
-    } catch (e) {
-        log.innerHTML = '领取失败：' + (e.message || '请检查暗号');
-    }
+  log.innerText = '正在领取 1000 GN...';
+  try {
+    await gn.methods.claim(code).send({ from: account });
+    log.innerHTML = `<span style="color:#88ff00">领取成功！+1000 GN 已到账</span>`;
+    $('#paste').value = '';
+  } catch (e) {
+    const msg = e.message.toLowerCase();
+    if (msg.includes('already used')) log.innerHTML = '失败：暗号已被使用';
+    else if (msg.includes('insufficient')) log.innerHTML = '失败：合约余额不足';
+    else log.innerHTML = '领取失败：' + (msg.split('\n')[0] || '请检查暗号');
+  }
 };
 </script>
 </body>
