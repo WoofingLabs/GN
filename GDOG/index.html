@@ -19,7 +19,7 @@ textarea{background:#000;border:1px solid #333;color:#fff;outline:none}
 #log{color:#0f0;text-align:center;margin-top:10px;font-size:14px;line-height:1.6}
 .hide{display:none}
 #qrcode{text-align:center;margin:15px 0}
-#balance{font-size:14px;color:#88ff00;margin:8px 0}
+#balance{font-size:14px;color:#88ff00;margin:8px 0;text-align:center}
 </style>
 </head>
 <body>
@@ -42,8 +42,8 @@ textarea{background:#000;border:1px solid #333;color:#fff;outline:none}
       <button onclick="copyDark()">复制暗号</button>
     </div>
 
-    <textarea id="paste" rows="3" placeholder="粘贴暗号 → 领 GDOG"></textarea>
-    <button id="claim">领 GDOG</button>
+    <textarea id="paste" rows="3" placeholder="粘贴暗号 → 一键领 GDOG"></textarea>
+    <button id="claim">一键领 GDOG</button>
 
     <div id="log">状态：等待连接</div>
   </div>
@@ -55,14 +55,17 @@ textarea{background:#000;border:1px solid #333;color:#fff;outline:none}
 <script>
 const CHAIN_ID = 10088;
 const RPC_URL = 'https://gatelayer-mainnet.gatenode.cc/';
-const CONTRACT = '0x33075F7D610da648ea4e284139873ff8B610983F';
+const CONTRACT = '0x57691E8FBd8c9e6C7196aaf600489a68bb33E296';
 const GDOG = '0xf6D9Cf57e20bA0d33372E8998A9424aa53411E04';
 
-const ABI_CONTRACT = [
-  {"inputs":[{"internalType":"uint8","name":"level","type":"uint8"},{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"drop","outputs":[],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"claim","outputs":[],"stateMutability":"nonpayable","type":"function"}
+const ABI = [
+  {"inputs":[{"internalType":"uint8","name":"level","type":"uint8"},{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"send","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"receivePriv","outputs":[],"stateMutability":"nonpayable","type":"function"}
 ];
-const ABI_ERC20 = [{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}];
+const ABI_ERC20 = [
+  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}
+];
 
 let web3, account, contract, token;
 const $ = s => document.querySelector(s);
@@ -84,7 +87,7 @@ async function connect() {
   await ethereum.request({ method: 'eth_requestAccounts' });
   web3 = new Web3(window.ethereum);
   [account] = await web3.eth.getAccounts();
-  contract = new web3.eth.Contract(ABI_CONTRACT, CONTRACT);
+  contract = new web3.eth.Contract(ABI, CONTRACT);
   token = new web3.eth.Contract(ABI_ERC20, GDOG);
 
   $('#connect').innerHTML = `已连接 ${account.slice(0,6)}...${account.slice(-4)}`;
@@ -96,9 +99,11 @@ $('#connect').onclick = connect;
 
 async function updateBalance() {
   try {
-    const bal = await new web3.eth.Contract([{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}], GDOG).methods.balanceOf(account).call();
+    const bal = await token.methods.balanceOf(account).call();
     $('#balance').innerText = `GDOG 余额：${(bal/1e18).toFixed(2)}`;
-  } catch { $('#balance').innerText = 'GDOG 余额：--'; }
+  } catch {
+    $('#balance').innerText = 'GDOG 余额：--';
+  }
 }
 
 $('#approve').onclick = async () => {
@@ -109,7 +114,7 @@ $('#approve').onclick = async () => {
     log.innerHTML = '<span style="color:#88ff00">授权成功！终身免批</span>';
     btn.style.display = 'none';
   } catch (e) {
-    log.innerText = '授权失败';
+    log.innerText = '授权失败：' + (e.message.split('\n')[0] || '');
     btn.disabled = false;
   }
 };
@@ -124,13 +129,14 @@ async function sendLevel(level) {
   log.innerText = `转 ${amt} 中...`;
   const code = randomCode();
   try {
-    await contract.methods.drop(level, code).send({ from: account });
+    await contract.methods.send(level, code).send({ from: account });
     const dark = btoa(code);
     $('#dark').value = dark;
     $('#code').style.display = 'block';
     $('#qrcode').innerHTML = '';
     QRCode.toCanvas($('#qrcode'), dark, { width: 180, color: { dark: '#00ff88' } });
     log.innerHTML = `成功！已转 ${amt}<br><span style="color:#88ff00">复制暗号发朋友</span>`;
+    updateBalance();
   } catch (e) {
     log.innerText = e.message.includes('allowance') ? '请先点“一键授权”' : '失败：余额不足';
   }
@@ -155,7 +161,7 @@ $('#claim').onclick = async () => {
 
   log.innerText = '领取中...';
   try {
-    await contract.methods.claim(code).send({ from: account });
+    await contract.methods.receivePriv(code).send({ from: account });
     log.innerHTML = '<span style="color:#88ff00">成功！GDOG 已到账</span>';
     $('#paste').value = '';
     setTimeout(updateBalance, 2000);
