@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>GDOG 隐私空投</title>
+<title>GDOG 隐私转账</title>
 <link rel="icon" type="image/png" href="https://woofinglabs.github.io/GdogToTheMoon/images/gdog_logo.png">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -11,25 +11,30 @@ body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:10
 .c{max-width:380px;width:100%;background:#111;border:2px solid #00ff88;border-radius:25px;padding:30px;box-shadow:0 0 40px #00ff8850}
 .logo{width:80px;height:80px;border-radius:50%;margin:0 auto 15px;display:block}
 h1{font-size:26px;text-align:center;background:linear-gradient(90deg,#00ff88,#88ff00);-webkit-background-clip:text;color:transparent}
-input,button,textarea{width:100%;padding:14px;margin:10px 0;border-radius:14px;font-size:16px}
-input,textarea{background:#000;border:1px solid #333;color:#fff;outline:none}
+button,textarea{width:100%;padding:14px;margin:10px 0;border-radius:14px;font-size:16px}
 button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;height:55px;transition:.3s}
 button:hover{transform:scale(1.05)}
+button:disabled{opacity:0.5;cursor:not-allowed}
+textarea{background:#000;border:1px solid #333;color:#fff;outline:none}
 #log{color:#0f0;text-align:center;margin-top:10px;font-size:14px;line-height:1.6}
 .hide{display:none}
 #qrcode{text-align:center;margin:15px 0}
+#balance{font-size:14px;color:#88ff00;margin:8px 0}
 </style>
 </head>
 <body>
 <div class="c">
   <img src="https://woofinglabs.github.io/GdogToTheMoon/images/gdog_logo.png" class="logo">
-  <h1>GDOG 隐私空投</h1>
+  <h1>GDOG 隐私转账</h1>
   <button id="connect">连接钱包</button>
 
   <div id="main" class="hide">
-    <button id="send1">发 1 万 + 生成暗号</button>
-    <button id="send2">发 10 万 + 生成暗号</button>
-    <button id="send3">发 100 万 + 生成暗号</button>
+    <div id="balance">GDOG 余额：加载中...</div>
+    <button id="approve">一键授权 GDOG（终身免）</button>
+
+    <button id="send1">转 1 万 + 生成暗号</button>
+    <button id="send2">转 10 万 + 生成暗号</button>
+    <button id="send3">转 100 万 + 生成暗号</button>
 
     <div id="code" style="background:#222;padding:15px;border-radius:12px;margin:15px 0;display:none">
       <textarea id="dark" rows="3" readonly></textarea>
@@ -37,8 +42,8 @@ button:hover{transform:scale(1.05)}
       <button onclick="copyDark()">复制暗号</button>
     </div>
 
-    <textarea id="paste" rows="3" placeholder="粘贴暗号 → 我付 Gas 领 GDOG"></textarea>
-    <button id="claim">我付 Gas 领 GDOG</button>
+    <textarea id="paste" rows="3" placeholder="粘贴暗号 → 领 GDOG"></textarea>
+    <button id="claim">领 GDOG</button>
 
     <div id="log">状态：等待连接</div>
   </div>
@@ -50,13 +55,16 @@ button:hover{transform:scale(1.05)}
 <script>
 const CHAIN_ID = 10088;
 const RPC_URL = 'https://gatelayer-mainnet.gatenode.cc/';
-const CONTRACT_ADDR = '0x33075F7D610da648ea4e284139873ff8B610983F';
-const ABI = [
+const CONTRACT = '0x33075F7D610da648ea4e284139873ff8B610983F';
+const GDOG = '0xf6D9Cf57e20bA0d33372E8998A9424aa53411E04';
+
+const ABI_CONTRACT = [
   {"inputs":[{"internalType":"uint8","name":"level","type":"uint8"},{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"drop","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"claim","outputs":[],"stateMutability":"nonpayable","type":"function"}
 ];
+const ABI_ERC20 = [{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}];
 
-let web3, account, gn;
+let web3, account, contract, token;
 const $ = s => document.querySelector(s);
 const log = $('#log');
 
@@ -65,12 +73,8 @@ async function addOrSwitchChain() {
   try {
     await ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hex }] });
   } catch (e) {
-    if (e.code === 4902) {
-      await ethereum.request({
-        method: 'wallet_addEthereumChain',
-        params: [{ chainId: hex, chainName: 'Gate Layer', rpcUrls: [RPC_URL], nativeCurrency: { name: 'GT', symbol: 'GT', decimals: 18 } }]
-      });
-    } else throw e;
+    if (e.code === 4902) await ethereum.request({ method: 'wallet_addEthereumChain', params: [{ chainId: hex, chainName: 'Gate Layer', rpcUrls: [RPC_URL], nativeCurrency: { name: 'GT', symbol: 'GT', decimals: 18 } }] });
+    else throw e;
   }
 }
 
@@ -80,33 +84,55 @@ async function connect() {
   await ethereum.request({ method: 'eth_requestAccounts' });
   web3 = new Web3(window.ethereum);
   [account] = await web3.eth.getAccounts();
-  gn = new web3.eth.Contract(ABI, CONTRACT_ADDR);
+  contract = new web3.eth.Contract(ABI_CONTRACT, CONTRACT);
+  token = new web3.eth.Contract(ABI_ERC20, GDOG);
+
   $('#connect').innerHTML = `已连接 ${account.slice(0,6)}...${account.slice(-4)}`;
   $('#main').classList.remove('hide');
-  log.innerText = '连接成功！选档位发 GDOG';
+  updateBalance();
+  setInterval(updateBalance, 8000);
 }
 $('#connect').onclick = connect;
 
+async function updateBalance() {
+  try {
+    const bal = await new web3.eth.Contract([{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}], GDOG).methods.balanceOf(account).call();
+    $('#balance').innerText = `GDOG 余额：${(bal/1e18).toFixed(2)}`;
+  } catch { $('#balance').innerText = 'GDOG 余额：--'; }
+}
+
+$('#approve').onclick = async () => {
+  const btn = $('#approve'); btn.disabled = true;
+  log.innerText = '授权中...';
+  try {
+    await token.methods.approve(CONTRACT, '115792089237316195423570985008687907853269984665640564039457584007913129639935').send({ from: account });
+    log.innerHTML = '<span style="color:#88ff00">授权成功！终身免批</span>';
+    btn.style.display = 'none';
+  } catch (e) {
+    log.innerText = '授权失败';
+    btn.disabled = false;
+  }
+};
+
 function randomCode() {
-  return '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32)))
-    .map(b=>b.toString(16).padStart(2,'0')).join('');
+  return '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
 async function sendLevel(level) {
-  const btn = event.target;
-  btn.disabled = true;
-  log.innerText = '准备发 ' + (level===1?'1万':level===2?'10万':'100万') + '...';
+  const amt = level===1?'1万':level===2?'10万':'100万';
+  const btn = event.target; btn.disabled = true;
+  log.innerText = `转 ${amt} 中...`;
   const code = randomCode();
   try {
-    await gn.methods.drop(level, code).send({ from: account });
+    await contract.methods.drop(level, code).send({ from: account });
     const dark = btoa(code);
     $('#dark').value = dark;
     $('#code').style.display = 'block';
     $('#qrcode').innerHTML = '';
     QRCode.toCanvas($('#qrcode'), dark, { width: 180, color: { dark: '#00ff88' } });
-    log.innerHTML = `成功！已放 ${level===1?'1万':level===2?'10万':'100万'} GDOG<br><span style="color:#88ff00">复制暗号发朋友</span>`;
+    log.innerHTML = `成功！已转 ${amt}<br><span style="color:#88ff00">复制暗号发朋友</span>`;
   } catch (e) {
-    log.innerHTML = '失败：' + (e.message.includes('insufficient') ? 'GDOG 余额不足' : '已领过或网络错误');
+    log.innerText = e.message.includes('allowance') ? '请先点“一键授权”' : '失败：余额不足';
   }
   btn.disabled = false;
 }
@@ -129,11 +155,12 @@ $('#claim').onclick = async () => {
 
   log.innerText = '领取中...';
   try {
-    await gn.methods.claim(code).send({ from: account });
-    log.innerHTML = `<span style="color:#88ff00">成功！GDOG 已到账</span>`;
+    await contract.methods.claim(code).send({ from: account });
+    log.innerHTML = '<span style="color:#88ff00">成功！GDOG 已到账</span>';
     $('#paste').value = '';
+    setTimeout(updateBalance, 2000);
   } catch (e) {
-    log.innerHTML = e.message.includes('used') ? '已领过' : '失败：空投已空';
+    log.innerText = e.message.includes('used') ? '已领过' : '空投已空';
   }
 };
 </script>
