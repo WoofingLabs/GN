@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>GN 暗号红包</title>
+<link rel="icon" type="image/png" href="https://raw.githubusercontent.com/WoofingLabs/Grabbit/refs/heads/main/images/GN.png">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#fff;font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem}
+.c{max-width:380px;width:100%;background:#111;border:2px solid #00ff88;border-radius:25px;padding:30px;box-shadow:0 0 40px #00ff8850}
+.logo{width:80px;height:80px;border-radius:50%;margin:0 auto 15px;display:block}
+h1{font-size:26px;text-align:center;background:linear-gradient(90deg,#00ff88,#88ff00);-webkit-background-clip:text;color:transparent}
+input,button,select,textarea{width:100%;padding:14px;margin:10px 0;border-radius:14px;font-size:16px}
+input,select,textarea{background:#000;border:1px solid #333;color:#fff;outline:none}
+button{background:#00ff88;color:#000;font-weight:900;border:none;cursor:pointer;height:55px;transition:.3s}
+button:hover{transform:scale(1.05)}
+#log{color:#0f0;text-align:center;margin-top:10px;font-size:14px;line-height:1.6}
+.hide{display:none}
+#qrcode{text-align:center;margin:15px 0}
+.small{font-size:12px;color:#aaa}
+</style>
+</head>
+<body>
+<div class="c">
+  <img src="https://raw.githubusercontent.com/WoofingLabs/Grabbit/main/images/GN.png" class="logo">
+  <h1>GN 暗号红包</h1>
+  <button id="connect">连接钱包</button>
+
+  <div id="main" class="hide">
+    <select id="amount">
+      <option value="100">100 GN</option>
+      <option value="1000">1,000 GN</option>
+      <option value="10000" selected>10,000 GN</option>
+      <option value="100000">100,000 GN</option>
+      <option value="1000000">1,000,000 GN</option>
+    </select>
+    <input id="times" type="number" min="1" max="100" value="5" placeholder="份数（1-100）">
+    <button id="send">发红包 + 生成暗号</button>
+
+    <div id="code" style="background:#222;padding:15px;border-radius:12px;margin:15px 0;display:none">
+      <textarea id="dark" rows="3" readonly></textarea>
+      <div id="qrcode"></div>
+      <button onclick="copyDark()">复制暗号</button>
+      <div class="small">发给朋友，抢到算数！</div>
+    </div>
+
+    <textarea id="paste" rows="3" placeholder="粘贴暗号 → 我付 Gas 领 GN"></textarea>
+    <button id="claim">领红包</button>
+
+    <div id="log">状态：等待连接</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/web3@1.7.0/dist/web3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+<script>
+// ==================== 链配置（不变） ====================
+const CHAIN_ID = 10088;
+const RPC_URL = 'https://gatelayer-mainnet.gatenode.cc/';
+
+// ==================== 你的合约 ====================
+const CONTRACT_ADDR = '0x60F4464988BE6635e461b34741b39Bf4aEAEAd3b';
+const ABI = [
+  {"inputs":[{"internalType":"uint256","name":"amountPerClaim","type":"uint256"},{"internalType":"uint256","name":"times","type":"uint256"},{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"create","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"claim","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"info","outputs":[{"components":[{"internalType":"uint256","name":"amountPerClaim","type":"uint256"},{"internalType":"uint256","name":"totalClaims","type":"uint256"},{"internalType":"uint256","name":"claimedCount","type":"uint256"}],"internalType":"struct G018.RedPacket","name":"","type":"tuple"}],"stateMutability":"view","type":"function"}
+];
+
+let web3, account, contract;
+const $ = s => document.querySelector(s);
+const log = $('#log');
+
+async function addOrSwitchChain() {
+  const hex = '0x' + CHAIN_ID.toString(16);
+  try {
+    await ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hex }] });
+  } catch (e) {
+    if (e.code === 4902) {
+      await ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: hex,
+          chainName: 'Gate Layer',
+          rpcUrls: [RPC_URL],
+          nativeCurrency: { name: 'GT', symbol: 'GT', decimals: 18 }
+        }]
+      });
+    } else throw e;
+  }
+}
+
+async function connect() {
+  if (!window.ethereum) return alert('请安装 MetaMask');
+  await addOrSwitchChain();
+  await ethereum.request({ method: 'eth_requestAccounts' });
+  web3 = new Web3(window.ethereum);
+  [account] = await web3.eth.getAccounts();
+  contract = new web3.eth.Contract(ABI, CONTRACT_ADDR);
+
+  $('#connect').innerHTML = `已连接 ${account.slice(0,6)}...${account.slice(-4)}`;
+  $('#main').classList.remove('hide');
+  log.innerText = '连接成功！选金额 → 填份数 → 点发红包';
+}
+$('#connect').onclick = connect;
+
+function randomCode() {
+  return '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32)))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ==================== 发红包 ====================
+$('#send').onclick = async () => {
+  const amt = BigInt($('#amount').value) * 1_000_000_000_000_000_000n;
+  const times = parseInt($('#times').value);
+  if (times < 1 || times > 100) return log.innerText = '份数 1-100';
+
+  log.innerText = `准备发 ${$('#amount').value} × ${times} 份...`;
+  const code = randomCode();
+
+  try {
+    await contract.methods.create(amt, times, code).send({ 
+      from: account,
+      gas: 300000
+    });
+
+    const dark = btoa(code);
+    $('#dark').value = dark;
+    $('#code').style.display = 'block';
+    $('#qrcode').innerHTML = '';
+    QRCode.toCanvas($('#qrcode'), dark, { width: 180, color: { dark: '#00ff88' } });
+    log.innerHTML = `成功！已放 ${times} 个 ${$('#amount').value} GN<br><span style="color:#88ff00">复制暗号发群</span>`;
+  } catch (e) {
+    log.innerHTML = '失败：' + (e.message.includes('allowance') ? '请先 Approve GN' : e.message.split('\n')[0]);
+  }
+};
+
+window.copyDark = () => {
+  $('#dark').select();
+  navigator.clipboard.writeText($('#dark').value);
+  log.innerText = '暗号已复制！发朋友圈！';
+};
+
+// ==================== 领红包 ====================
+$('#claim').onclick = async () => {
+  const input = $('#paste').value.trim();
+  if (!input) return log.innerText = '请粘贴暗号';
+  let code;
+  try { code = atob(input); } catch { return log.innerText = '暗号错误'; }
+  if (!code.startsWith('0x') || code.length !== 66) return log.innerText = '暗号不合法';
+
+  log.innerText = '领取中...';
+  try {
+    await contract.methods.claim(code).send({ from: account });
+    log.innerHTML = `<span style="color:#88ff00">成功！GN 已到账</span>`;
+    $('#paste').value = '';
+  } catch (e) {
+    const msg = e.message;
+    if (msg.includes('all claimed')) log.innerHTML = '已领完';
+    else if (msg.includes('no packet')) log.innerHTML = '暗号无效';
+    else log.innerHTML = '失败：' + msg.split('\n')[0];
+  }
+};
+</script>
+</body>
+</html>
