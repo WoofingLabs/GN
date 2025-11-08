@@ -33,14 +33,12 @@ label{display:flex;align-items:center;gap:10px;margin:10px 0;font-size:14px}
   <button id="connect">连接钱包</button>
 
   <div id="main" class="hide">
-    <div class="small">点金额 → 填次数 → 选模式 → 发暗号</div>
+    <div class="small">点金额 → 填次数 → 选模式 → 一键转账</div>
 
     <div class="btn-grid">
       <div class="btn" data-val="100">100</div>
       <div class="btn" data-val="1000">1,000</div>
-      <div class="btn"
-
- data-val="10000">10,000</div>
+      <div class="btn" data-val="10000">10,000</div>
       <div class="btn" data-val="100000">100,000</div>
       <div class="btn" data-val="1000000">1,000,000</div>
     </div>
@@ -52,13 +50,13 @@ label{display:flex;align-items:center;gap:10px;margin:10px 0;font-size:14px}
       <span>一人只能领一次（防刷）</span>
     </label>
 
-    <button id="send">生成暗号 + 转账</button>
+    <button id="send">一键转账 + 生成暗号</button>
 
     <div id="code" style="background:#222;padding:15px;border-radius:12px;margin:15px 0;display:none">
       <textarea id="dark" rows="3" readonly></textarea>
       <div id="qrcode"></div>
       <button onclick="copyDark()">复制暗号</button>
-      <div class="small">发给对方，对方粘贴领取</div>
+      <div class="small">发给对方，扫码即领</div>
     </div>
 
     <textarea id="paste" rows="3" placeholder="粘贴暗号 → 领 GN"></textarea>
@@ -75,15 +73,23 @@ label{display:flex;align-items:center;gap:10px;margin:10px 0;font-size:14px}
 const CHAIN_ID = 10088;
 const RPC_URL = 'https://gatelayer-mainnet.gatenode.cc/';
 const CONTRACT = '0xF9D994e441BcE10859346ecDbdd888F7D4E1cc9d';
+const GN_TOKEN = '0x284938C2A0ae7BdCA8563270134850bFB51a9332';
+
 const ABI = [
   {"inputs":[{"internalType":"uint256","name":"amountPerClaim","type":"uint256"},{"internalType":"uint256","name":"times","type":"uint256"},{"internalType":"bytes32","name":"code","type":"bytes32"},{"internalType":"bool","name":"onePerAddress","type":"bool"}],"name":"create","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"internalType":"bytes32","name":"code","type":"bytes32"}],"name":"claim","outputs":[],"stateMutability":"nonpayable","type":"function"}
 ];
+const ERC20_ABI = [
+  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}
+];
 
-let web3, account, contract, selected = 10000;
+let web3, account, contract, token;
+let selected = 10000;
 const $ = s => document.querySelector(s);
 const log = $('#log');
 
+// 切换链
 async function addOrSwitchChain() {
   const hex = '0x' + CHAIN_ID.toString(16);
   try {
@@ -103,6 +109,7 @@ async function addOrSwitchChain() {
   }
 }
 
+// 连接
 async function connect() {
   if (!window.ethereum) return alert('请安装 MetaMask');
   await addOrSwitchChain();
@@ -110,13 +117,15 @@ async function connect() {
   web3 = new Web3(window.ethereum);
   [account] = await web3.eth.getAccounts();
   contract = new web3.eth.Contract(ABI, CONTRACT);
+  token = new web3.eth.Contract(ERC20_ABI, GN_TOKEN);
 
   $('#connect').innerHTML = `已连接 ${account.slice(0,6)}...${account.slice(-4)}`;
   $('#main').classList.remove('hide');
-  log.innerText = '连接成功！选金额 → 填次数 → 发暗号';
+  log.innerText = '连接成功！选金额 → 一键转账';
 }
 $('#connect').onclick = connect;
 
+// 金额按钮
 document.querySelectorAll('.btn').forEach(b => {
   b.onclick = () => {
     document.querySelectorAll('.btn').forEach(x => x.classList.remove('active'));
@@ -131,17 +140,29 @@ function randomCode() {
     .map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// 一键转账（自动授权）
 $('#send').onclick = async () => {
   const times = parseInt($('#times').value);
   if (times < 1 || times > 100) return log.innerText = '次数 1-100';
   const amt = BigInt(selected) * 1_000_000_000_000_000_000n;
+  const total = amt * BigInt(times);
   const onePer = $('#onePerAddr').checked;
-
-  log.innerText = `转账 ${selected} × ${times} 次...`;
   const code = randomCode();
 
+  log.innerText = '检查授权...';
+
   try {
+    const allowance = await token.methods.allowance(account, CONTRACT).call();
+    if (BigInt(allowance) < total) {
+      log.innerText = '授权 GN 中...';
+      await token.methods.approve(CONTRACT, total).send({ from: account });
+      log.innerText = '授权成功！转账中...';
+    } else {
+      log.innerText = '已授权，转账中...';
+    }
+
     await contract.methods.create(amt, times, code, onePer).send({ from: account });
+
     const dark = btoa(code);
     $('#dark').value = dark;
     $('#code').style.display = 'block';
@@ -149,7 +170,7 @@ $('#send').onclick = async () => {
     QRCode.toCanvas($('#qrcode'), dark, { width: 180, color: { dark: '#00ff88' } });
     log.innerHTML = `成功！已转 ${times} 次 ${selected} GN<br><span style="color:#88ff00">复制暗号发对方</span>`;
   } catch (e) {
-    log.innerHTML = '失败：' + (e.message.includes('allowance') ? '请先 Approve GN' : e.message.split('\n')[0]);
+    log.innerHTML = '失败：' + (e.message.split('\n')[0] || '网络错误');
   }
 };
 
@@ -159,6 +180,7 @@ window.copyDark = () => {
   log.innerText = '暗号已复制！';
 };
 
+// 领取
 $('#claim').onclick = async () => {
   const input = $('#paste').value.trim();
   if (!input) return log.innerText = '请粘贴暗号';
@@ -169,7 +191,7 @@ $('#claim').onclick = async () => {
   log.innerText = '领取中...';
   try {
     await contract.methods.claim(code).send({ from: account });
-    log.innerHTML = `<span style="color:#88ff00">成功！+${selected} GN 到账</span>`;
+    log.innerHTML = `<span style="color:#88ff00">成功！GN 已到账</span>`;
     $('#paste').value = '';
   } catch (e) {
     const msg = e.message;
